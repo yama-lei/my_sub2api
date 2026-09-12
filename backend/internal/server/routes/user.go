@@ -87,6 +87,8 @@ func RegisterUserRoutes(
 		{
 			groups.GET("/available", h.APIKey.GetAvailableGroups)
 			groups.GET("/rates", h.APIKey.GetUserGroupRates)
+			// 分组状态页：24h EMA 指标（decode 速度/TTFT 按 fast、normal 区分）+ uptime + 缓存率
+			groups.GET("/status", panelRateLimiter.Heavy(), h.GroupStatus.GetGroupStatus)
 		}
 
 		// 用户可用渠道（非管理员接口）

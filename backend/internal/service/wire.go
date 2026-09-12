@@ -880,6 +880,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
 	NewCpaService,
+	NewGroupStatusService,
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,

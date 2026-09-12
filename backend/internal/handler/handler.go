@@ -57,6 +57,7 @@ type Handlers struct {
 	Announcement     *AnnouncementHandler
 	ChannelMonitor   *ChannelMonitorUserHandler
 	ChannelMonitorV2 *ChannelMonitorV2Handler
+	GroupStatus      *GroupStatusHandler
 	Admin            *AdminHandlers
 	Gateway          *GatewayHandler
 	OpenAIGateway    *OpenAIGatewayHandler
