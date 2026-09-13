@@ -284,6 +284,10 @@ func (s *GroupStatusService) GetReport(ctx context.Context, userID int64) (*Grou
 			errorBucketsByGroup[group.ID],
 			since, bucketCount,
 		)
+		// 无模型流量的分组序列化为 [] 而不是 null，前端无需判空。
+		if entry.Models == nil {
+			entry.Models = []GroupModelStatus{}
+		}
 		report.Groups = append(report.Groups, entry)
 	}
 	return report, nil

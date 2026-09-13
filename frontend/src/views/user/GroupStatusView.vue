@@ -177,7 +177,7 @@
           </div>
 
           <!-- 按模型分开展示：uptime 条 + 时间曲线 + 分模式指标 -->
-          <div v-if="group.models.length" class="space-y-3">
+          <div v-if="group.models && group.models.length" class="space-y-3">
             <h3 class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {{ t('groupStatus.perModelTitle') }}
               <span class="badge badge-gray shrink-0">{{ group.models.length }}</span>
