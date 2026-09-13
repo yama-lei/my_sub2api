@@ -161,4 +161,91 @@ func TestGroupStatusWindowConstants(t *testing.T) {
 	if GroupStatusEmaHalfLife <= 0 || GroupStatusEmaHalfLife > GroupStatusWindow {
 		t.Fatalf("half life = %v, must be in (0, 24h]", GroupStatusEmaHalfLife)
 	}
+	if GroupStatusSeriesBucket <= 0 || GroupStatusWindow%GroupStatusSeriesBucket != 0 {
+		t.Fatalf("series bucket = %v, must divide window evenly", GroupStatusSeriesBucket)
+	}
+}
+
+// 模型级组装：EMA 指标按模型拆分、桶级序列补全完整网格（含无流量桶）并计算桶内 uptime。
+func TestBuildGroupModelStatuses(t *testing.T) {
+	modelRows := []GroupStatusUsageRow{
+		{GroupID: 2, Model: "gpt-a", Tier: GroupStatusTierFast, Requests: 10,
+			SpeedNum: 50 * 1, SpeedDen: 1, TTFTNum: 800 * 1, TTFTDen: 1, CacheNum: 70, CacheDen: 100},
+		{GroupID: 2, Model: "gpt-a", Tier: GroupStatusTierNormal, Requests: 5,
+			SpeedNum: 25 * 1, SpeedDen: 1, TTFTNum: 400 * 1, TTFTDen: 1, CacheNum: 30, CacheDen: 100},
+		{GroupID: 2, Model: "gpt-b", Tier: GroupStatusTierNormal, Requests: 2,
+			SpeedNum: 10, SpeedDen: 1},
+	}
+	usageBuckets := []GroupModelUsageBucket{
+		{GroupID: 2, Model: "gpt-a", BucketIndex: 0, Requests: 6,
+			DecodeTokens: 600, DecodeMs: 10000, TTFTSum: 1500, TTFTCount: 3, CacheNum: 60, CacheDen: 100},
+		{GroupID: 2, Model: "gpt-a", BucketIndex: 1, Requests: 4},
+		{GroupID: 2, Model: "gpt-b", BucketIndex: 1, Requests: 2},
+	}
+	errorBuckets := []GroupModelErrorBucket{
+		{GroupID: 2, Model: "gpt-a", BucketIndex: 1, Total: 3, Service: 1},
+	}
+
+	start := time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)
+	models := BuildGroupModelStatuses(modelRows, usageBuckets, errorBuckets, start, 4)
+
+	if len(models) != 2 {
+		t.Fatalf("models = %d, want 2", len(models))
+	}
+	// 按总调用量降序：gpt-a(15) 在 gpt-b(2) 之前。
+	if models[0].Model != "gpt-a" || models[1].Model != "gpt-b" {
+		t.Fatalf("model order = [%s, %s], want [gpt-a, gpt-b]", models[0].Model, models[1].Model)
+	}
+	a := models[0]
+	if a.Overall.Requests != 15 {
+		t.Fatalf("gpt-a overall requests = %d, want 15", a.Overall.Requests)
+	}
+	if got := *a.Fast.DecodeSpeedTPS; got != 50 {
+		t.Fatalf("gpt-a fast speed = %v, want 50", got)
+	}
+	// 完整桶网格：4 个桶，时间对齐 start。
+	if len(a.Series) != 4 {
+		t.Fatalf("series len = %d, want 4", len(a.Series))
+	}
+	b0, b1 := a.Series[0], a.Series[1]
+	if !b0.BucketStart.Equal(start) || !b1.BucketStart.Equal(start.Add(GroupStatusSeriesBucket)) {
+		t.Fatalf("bucket starts misaligned: %v / %v", b0.BucketStart, b1.BucketStart)
+	}
+	// 桶 0：decode = 600/(10000/1000)=60 tok/s，ttft=500，cache=0.6，uptime=1
+	if got := *b0.DecodeSpeedTPS; got != 60 {
+		t.Fatalf("bucket0 speed = %v, want 60", got)
+	}
+	if got := *b0.TTFTMs; got != 500 {
+		t.Fatalf("bucket0 ttft = %v, want 500", got)
+	}
+	if got := *b0.CacheRate; got != 0.6 {
+		t.Fatalf("bucket0 cache = %v, want 0.6", got)
+	}
+	if got := *b0.SuccessRate; got != 1 {
+		t.Fatalf("bucket0 uptime = %v, want 1", got)
+	}
+	// 桶 1：只有 4 次成功 + 1 次服务错误 → uptime 0.8（degraded 桶）；无有效 decode 样本。
+	if b1.Requests != 4 || b1.ServiceErrors != 1 {
+		t.Fatalf("bucket1 traffic = %d/%d, want 4/1", b1.Requests, b1.ServiceErrors)
+	}
+	if got := *b1.SuccessRate; got != 0.8 {
+		t.Fatalf("bucket1 uptime = %v, want 0.8", got)
+	}
+	if b1.DecodeSpeedTPS != nil {
+		t.Fatalf("bucket1 speed = %v, want nil", *b1.DecodeSpeedTPS)
+	}
+	// 桶 2/3：无流量，全部 nil，uptime 也为 nil。
+	for _, idx := range []int{2, 3} {
+		p := a.Series[idx]
+		if p.Requests != 0 || p.SuccessRate != nil || p.TTFTMs != nil {
+			t.Fatalf("bucket%d should be empty, got %+v", idx, p)
+		}
+	}
+}
+
+// 无 EMA 行时（如分组只有无模型归属的调用）不产出模型列表。
+func TestBuildGroupModelStatusesEmpty(t *testing.T) {
+	if got := BuildGroupModelStatuses(nil, nil, nil, time.Now(), 4); got != nil {
+		t.Fatalf("expected nil models, got %+v", got)
+	}
 }

@@ -10,6 +10,18 @@ export default {
     emptyTitle: '暂无可用分组',
     emptyDescription: '你的账号当前没有可用的分组，请联系管理员开通。',
     uptimeLabel: '成功率（uptime）',
+    uptimeNow: '现在',
+    uptimeNoTraffic: '该时段无调用',
+    uptimeTick: '成功率 {value} · 成功 {success} · 错误 {errors}',
+    uptimeBarAria: '过去 {window} 小时、每 {bucket} 分钟一格的可用性条',
+    perModelTitle: '按模型',
+    modelsEmpty: '窗口内没有模型级调用数据',
+    modelCalls: '{count} 次调用',
+    chartAria: '模型解码速度与 TTFT 时间曲线',
+    chart: {
+      speedLegend: '解码速度（tok/s）',
+      ttftLegend: 'TTFT（ms）',
+    },
     uptimeDetail:
       '近 {window} 小时：成功 {success} 次 · 服务错误 {serviceErrors} 次（余额/配额等业务限制 {totalErrors} 次不计入成功率）',
     methodology:

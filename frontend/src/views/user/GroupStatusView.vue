@@ -176,10 +176,28 @@
             </table>
           </div>
 
+          <!-- 按模型分开展示：uptime 条 + 时间曲线 + 分模式指标 -->
+          <div v-if="group.models.length" class="space-y-3">
+            <h3 class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {{ t('groupStatus.perModelTitle') }}
+              <span class="badge badge-gray shrink-0">{{ group.models.length }}</span>
+            </h3>
+            <ModelStatusPanel
+              v-for="model in group.models"
+              :key="model.model"
+              :model="model"
+              :bucket-minutes="report.series_bucket_minutes"
+            />
+          </div>
+          <p v-else class="text-[11px] text-gray-400 dark:text-gray-500">
+            {{ t('groupStatus.modelsEmpty') }}
+          </p>
+
           <!-- 底部说明：uptime 统计口径 -->
           <p v-if="group.has_traffic" class="text-[11px] text-gray-400 dark:text-gray-500">
             {{
               t('groupStatus.uptimeDetail', {
+                window: report.window_hours,
                 success: group.uptime.success_requests,
                 serviceErrors: group.uptime.service_errors,
                 totalErrors: group.uptime.error_requests,
@@ -203,6 +221,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ModelStatusPanel from '@/features/group-status/ModelStatusPanel.vue'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { groupStatusApi } from '@/api/groupStatus'
 import type { GroupHealthStatus, GroupStatusReport, GroupStatusTierStats } from '@/api/groupStatus'

@@ -10,6 +10,18 @@ export default {
     emptyTitle: 'No groups available',
     emptyDescription: 'Your account has no available groups. Please contact an administrator.',
     uptimeLabel: 'Success rate (uptime)',
+    uptimeNow: 'now',
+    uptimeNoTraffic: 'No traffic in this bucket',
+    uptimeTick: 'Uptime {value} · {success} ok · {errors} errors',
+    uptimeBarAria: 'Availability for the last {window}h, {bucket}min per tick',
+    perModelTitle: 'Per model',
+    modelsEmpty: 'No per-model traffic in this window',
+    modelCalls: '{count} calls',
+    chartAria: 'Model decode speed and TTFT trend',
+    chart: {
+      speedLegend: 'Decode speed (tok/s)',
+      ttftLegend: 'TTFT (ms)',
+    },
     uptimeDetail:
       'Last {window}h: {success} succeeded · {serviceErrors} service errors (business-limited requests excluded: {totalErrors})',
     methodology:
