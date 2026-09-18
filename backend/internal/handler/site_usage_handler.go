@@ -320,19 +320,24 @@ func parseSiteUsageFilters(c *gin.Context, requireDateRange bool) (*siteUsageFil
 	endDateStr := c.Query("end_date")
 
 	switch {
-	case startDateStr != "" && endDateStr != "":
-		startTime, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
-		if err != nil {
-			return nil, err
+	case startDateStr != "" || endDateStr != "":
+		// 与管理端一致：start/end 各自独立生效。
+		if startDateStr != "" {
+			startTime, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
+			if err != nil {
+				return nil, err
+			}
+			filters.StartTime = &startTime
 		}
-		endTime, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
-		if err != nil {
-			return nil, err
+		if endDateStr != "" {
+			endTime, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
+			if err != nil {
+				return nil, err
+			}
+			// 半开区间 [start, end)：end 取次日 00:00（DST 安全），与管理端一致。
+			endTime = endTime.AddDate(0, 0, 1)
+			filters.EndTime = &endTime
 		}
-		// 半开区间 [start, end)：end 取次日 00:00（DST 安全），与管理端一致。
-		endTime = endTime.AddDate(0, 0, 1)
-		filters.StartTime = &startTime
-		filters.EndTime = &endTime
 	case requireDateRange:
 		now := timezone.NowInUserLocation(userTZ)
 		var startTime time.Time
@@ -533,13 +538,14 @@ func (h *SiteUsageHandler) Ranking(c *gin.Context) {
 	sortBy := strings.TrimSpace(c.Query("sort_by"))
 
 	dim := usagestats.UserBreakdownDimension{
-		GroupID:     filters.GroupID,
-		Model:       filters.Model,
-		ModelType:   usagestats.ModelSourceRequested,
-		RequestType: filters.RequestType,
-		Stream:      filters.Stream,
-		BillingType: filters.BillingType,
-		SortBy:      sortBy,
+		GroupID:            filters.GroupID,
+		Model:              filters.Model,
+		ModelType:          usagestats.ModelSourceRequested,
+		RequestType:        filters.RequestType,
+		Stream:             filters.Stream,
+		NativeCompactionV2: filters.NativeCompactionV2,
+		BillingType:        filters.BillingType,
+		SortBy:             sortBy,
 	}
 
 	cacheKey := "ranking:" + startTime.UTC().Format(time.RFC3339) + ":" + endTime.UTC().Format(time.RFC3339) + ":" + strconv.Itoa(limit) + ":" + sortBy + ":" + mustMarshalSiteCacheKey(filters)
