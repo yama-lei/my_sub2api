@@ -4,6 +4,9 @@ FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
+	src/api/__tests__/keys.bulkUpdate.spec.ts \
+	src/components/keys/__tests__/BulkEditKeysModal.spec.ts \
+	src/views/user/__tests__/KeysView.spec.ts \
 	src/api/__tests__/channelMonitorV2.spec.ts \
 	src/api/__tests__/cpa.spec.ts \
 	src/views/admin/__tests__/CpaView.spec.ts \
