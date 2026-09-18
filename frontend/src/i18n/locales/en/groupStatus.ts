@@ -44,5 +44,23 @@ export default {
       ttft: 'Avg TTFT',
       cacheRate: 'Cache rate',
     },
+    kpi: {
+      uptime: 'Uptime',
+      ttft: 'Avg TTFT',
+      decodeSpeed: 'Decode speed',
+      cacheRate: 'Cache rate',
+      requests: 'Requests',
+      requestsDetail: '{groups} groups · last {window}h',
+      weightedDetail: 'EMA weighted · last {window}h',
+      cacheDetail: 'cache_read / (input + cache_creation + cache_read)',
+    },
+    filters: {
+      platform: 'Platform',
+      allPlatforms: 'All platforms',
+      group: 'Group',
+      allGroups: 'All groups',
+      clear: 'Clear filters',
+      visibleCount: '{visible}/{total} groups',
+    },
   },
 }

@@ -44,5 +44,23 @@ export default {
       ttft: '平均 TTFT',
       cacheRate: '缓存率',
     },
+    kpi: {
+      uptime: '成功率（uptime）',
+      ttft: '平均 TTFT',
+      decodeSpeed: '解码速度',
+      cacheRate: '缓存率',
+      requests: '调用量',
+      requestsDetail: '{groups} 个分组 · 近 {window} 小时',
+      weightedDetail: 'EMA 加权 · 近 {window} 小时',
+      cacheDetail: 'cache_read / (input + cache_creation + cache_read)',
+    },
+    filters: {
+      platform: '平台',
+      allPlatforms: '全部平台',
+      group: '分组',
+      allGroups: '全部分组',
+      clear: '清除筛选',
+      visibleCount: '{visible}/{total} 个分组',
+    },
   },
 }

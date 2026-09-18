@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
     <div class="space-y-6 pb-12">
-      <!-- Ops 风格外壳：标题工具栏（与渠道状态页一致的 elevated shell） -->
+      <!-- Ops 风格外壳：标题工具栏 + 筛选行（与渠道状态页一致的 elevated shell） -->
       <section
         class="card sticky top-0 z-20 !rounded-3xl !border-0 p-0 shadow-sm ring-1 ring-gray-900/5 backdrop-blur-sm dark:!bg-dark-800 dark:ring-dark-700 supports-[backdrop-filter]:bg-white/95 dark:supports-[backdrop-filter]:bg-dark-800/95"
       >
@@ -46,6 +46,76 @@
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
           </button>
         </header>
+
+        <!-- 单行筛选工具栏（仿渠道状态页）：平台 · 分组 · 清除 -->
+        <div class="monitor-toolbar flex flex-nowrap items-center gap-1.5 overflow-x-auto px-4 py-3 sm:gap-2 sm:px-5">
+          <FilterMultiSelect
+            v-model="selectedPlatforms"
+            compact
+            :label="t('groupStatus.filters.platform')"
+            :all-label="t('groupStatus.filters.allPlatforms')"
+            :options="platformOptions"
+          />
+          <FilterMultiSelect
+            v-model="selectedGroupKeys"
+            compact
+            :label="t('groupStatus.filters.group')"
+            :all-label="t('groupStatus.filters.allGroups')"
+            :options="groupOptions"
+          />
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm shrink-0 !px-2 !py-1 text-xs"
+            :disabled="!hasDimensionFilter"
+            :class="!hasDimensionFilter ? 'opacity-40' : ''"
+            @click="clearDimensionFilters"
+          >
+            {{ t('groupStatus.filters.clear') }}
+          </button>
+
+          <span
+            v-if="report && report.groups.length > 0"
+            class="ml-auto hidden shrink-0 text-[11px] tabular-nums text-gray-400 dark:text-dark-400 sm:block"
+          >
+            {{ t('groupStatus.filters.visibleCount', { visible: visibleGroups.length, total: report.groups.length }) }}
+          </span>
+        </div>
+      </section>
+
+      <!-- 总览 KPI（仿渠道状态页 MetricCell：聚合当前筛选下的分组指标） -->
+      <section
+        v-if="summary"
+        class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+        :aria-label="t('groupStatus.title')"
+      >
+        <MetricCell
+          :label="t('groupStatus.kpi.uptime')"
+          :value="kpiUptimeText"
+          :detail="t('groupStatus.kpi.requestsDetail', { groups: summary.groups, window: reportWindowHours })"
+          :state="kpiUptimeState"
+        />
+        <MetricCell
+          :label="t('groupStatus.kpi.ttft')"
+          :value="kpiTtftText"
+          :detail="t('groupStatus.kpi.weightedDetail', { window: reportWindowHours })"
+          :state="kpiTtftState"
+        />
+        <MetricCell
+          :label="t('groupStatus.kpi.decodeSpeed')"
+          :value="kpiTpsText"
+          :detail="t('groupStatus.kpi.weightedDetail', { window: reportWindowHours })"
+        />
+        <MetricCell
+          :label="t('groupStatus.kpi.cacheRate')"
+          :value="kpiCacheText"
+          :detail="t('groupStatus.kpi.cacheDetail')"
+          :state="kpiCacheState"
+        />
+        <MetricCell
+          :label="t('groupStatus.kpi.requests')"
+          :value="kpiRequestsText"
+          :detail="t('groupStatus.kpi.requestsDetail', { groups: summary.groups, window: reportWindowHours })"
+        />
       </section>
 
       <!-- 加载中 -->
@@ -78,10 +148,21 @@
         />
       </section>
 
+      <!-- 筛选后为空 -->
+      <section
+        v-else-if="report && visibleGroups.length === 0"
+        class="card flex min-h-[240px] flex-col items-center justify-center gap-3 !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700"
+      >
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('groupStatus.filters.allGroups') }}: 0</p>
+        <button type="button" class="btn btn-secondary btn-sm" @click="clearDimensionFilters">
+          {{ t('groupStatus.filters.clear') }}
+        </button>
+      </section>
+
       <!-- 分组卡片 -->
       <template v-else-if="report">
         <section
-          v-for="group in report.groups"
+          v-for="group in visibleGroups"
           :key="group.group_id"
           class="card flex flex-col gap-4 !rounded-3xl !border-0 !p-5 shadow-sm ring-1 ring-gray-900/5 sm:!p-6 dark:!bg-dark-800 dark:ring-dark-700"
         >
@@ -216,16 +297,25 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ModelStatusPanel from '@/features/group-status/ModelStatusPanel.vue'
+import MetricCell from '@/features/channel-monitor-v2/MetricCell.vue'
+import FilterMultiSelect from '@/features/channel-monitor-v2/FilterMultiSelect.vue'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { groupStatusApi } from '@/api/groupStatus'
 import type { GroupHealthStatus, GroupStatusReport, GroupStatusTierStats } from '@/api/groupStatus'
+import type { HealthState } from '@/api/channelMonitorV2'
 import { formatMonitorMs, formatMonitorPercent, formatMonitorThroughput } from '@/features/channel-monitor-v2/monitorFormat'
+
+interface FilterOption {
+  value: string
+  label: string
+  count?: number
+}
 
 const AUTO_REFRESH_MS = 60_000
 
@@ -235,6 +325,121 @@ const loading = ref(true)
 const refreshing = ref(false)
 const error = ref('')
 let autoTimer: ReturnType<typeof setInterval> | null = null
+
+// ---- 维度筛选（仿渠道状态页 toolbar；仅影响当前视图，不改数据口径） ----
+const selectedPlatforms = ref<string[]>([])
+const selectedGroupKeys = ref<string[]>([])
+
+const platformOptions = computed<FilterOption[]>(() => {
+  if (!report.value) return []
+  return Array.from(new Set(report.value.groups.map((g) => g.platform)))
+    .sort()
+    .map((platform) => ({ value: platform, label: platform.toUpperCase() }))
+})
+
+const groupOptions = computed<FilterOption[]>(() => {
+  if (!report.value) return []
+  return report.value.groups
+    .filter((g) => selectedPlatforms.value.length === 0 || selectedPlatforms.value.includes(g.platform))
+    .map((g) => ({ value: String(g.group_id), label: g.name }))
+})
+
+const hasDimensionFilter = computed(() => selectedPlatforms.value.length > 0 || selectedGroupKeys.value.length > 0)
+
+function clearDimensionFilters() {
+  selectedPlatforms.value = []
+  selectedGroupKeys.value = []
+}
+
+const visibleGroups = computed(() => {
+  if (!report.value) return []
+  return report.value.groups.filter((g) => {
+    if (selectedPlatforms.value.length > 0 && !selectedPlatforms.value.includes(g.platform)) return false
+    if (selectedGroupKeys.value.length > 0 && !selectedGroupKeys.value.includes(String(g.group_id))) return false
+    return true
+  })
+})
+
+// ---- 总览 KPI（按调用量加权聚合当前可见分组） ----
+interface KpiSummary {
+  groups: number
+  requests: number
+  uptime: number | null
+  ttftMs: number | null
+  tps: number | null
+  cacheRate: number | null
+}
+
+const summary = computed<KpiSummary | null>(() => {
+  if (!report.value || visibleGroups.value.length === 0) return null
+  let requests = 0
+  let success = 0
+  let serviceErrors = 0
+  let weight = 0
+  let ttftWeighted = 0
+  let tpsWeighted = 0
+  let cacheWeighted = 0
+  for (const g of visibleGroups.value) {
+    requests += g.overall.requests
+    success += g.uptime.success_requests
+    serviceErrors += g.uptime.service_errors
+    if (g.overall.requests > 0) {
+      weight += g.overall.requests
+      if (g.overall.ttft_ms != null) ttftWeighted += g.overall.ttft_ms * g.overall.requests
+      if (g.overall.decode_speed_tps != null) tpsWeighted += g.overall.decode_speed_tps * g.overall.requests
+      if (g.overall.cache_rate != null) cacheWeighted += g.overall.cache_rate * g.overall.requests
+    }
+  }
+  const totalErrors = success + serviceErrors
+  return {
+    groups: visibleGroups.value.length,
+    requests,
+    uptime: totalErrors > 0 ? success / totalErrors : null,
+    ttftMs: weight > 0 && ttftWeighted > 0 ? ttftWeighted / weight : null,
+    tps: weight > 0 && tpsWeighted > 0 ? tpsWeighted / weight : null,
+    cacheRate: weight > 0 && cacheWeighted > 0 ? cacheWeighted / weight : null,
+  }
+})
+
+const reportWindowHours = computed(() => report.value?.window_hours ?? 24)
+
+const kpiUptimeText = computed(() => (summary.value?.uptime != null ? formatMonitorPercent(summary.value.uptime) : '-'))
+// 与分组健康带同阈值：≥99% 健康、≥90% 波动，否则异常
+const kpiUptimeState = computed<HealthState | undefined>(() => {
+  const value = summary.value?.uptime
+  if (value == null) return undefined
+  if (value >= 0.99) return 'healthy'
+  if (value >= 0.9) return 'warning'
+  return 'critical'
+})
+
+const kpiTtftText = computed(() => (summary.value?.ttftMs != null ? formatMonitorMs(summary.value.ttftMs) : '-'))
+// TTFT 健康档：≤3s 健康、≤8s 波动（与渠道状态 TTFT 档位同量级）
+const kpiTtftState = computed<HealthState | undefined>(() => {
+  const value = summary.value?.ttftMs
+  if (value == null) return undefined
+  if (value <= 3000) return 'healthy'
+  if (value <= 8000) return 'warning'
+  return 'critical'
+})
+
+const kpiTpsText = computed(() => {
+  const value = summary.value?.tps
+  if (value == null) return '-'
+  return `${formatMonitorThroughput(value)} tok/s`
+})
+
+const kpiCacheText = computed(() => (summary.value?.cacheRate != null ? formatMonitorPercent(summary.value.cacheRate) : '-'))
+// 缓存率健康档：≥50% 健康、≥20% 波动（与渠道状态缓存率展示同量级）
+const kpiCacheState = computed<HealthState | undefined>(() => {
+  const value = summary.value?.cacheRate
+  if (value == null) return undefined
+  if (value >= 0.5) return 'healthy'
+  if (value >= 0.2) return 'warning'
+  return 'critical'
+})
+
+const kpiRequestsText = computed(() => (summary.value ? formatNumber(summary.value.requests) : '-'))
 
 async function reload(initial = true) {
   if (initial) {
