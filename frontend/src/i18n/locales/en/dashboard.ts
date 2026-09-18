@@ -462,7 +462,15 @@ export default {
       detailAccuracy: 'Accuracy',
       detailCoordinates: 'Coordinates',
     },
-    tabs: { usage: 'Usage', errors: 'Error Requests', ranking: 'User Ranking' },
+    tabs: { usage: 'Usage', errors: 'Error Requests', ranking: 'User Ranking', site: 'Site-wide' },
+    site: {
+      maskedHint: 'Site-wide view: usernames and API key names are masked (first/last 2 chars kept, middle replaced with **); IP and other private fields are hidden.',
+      maskedHintShort: 'Usernames are masked',
+      maskBadge: 'Masked',
+      detail: 'Site records',
+      ranking: 'Site ranking',
+      loadFailed: 'Failed to load site-wide usage',
+    },
     errors: {
       time: 'Time', model: 'Model', endpoint: 'Endpoint', status: 'Status',
       category: 'Category', platform: 'Platform', message: 'Message',

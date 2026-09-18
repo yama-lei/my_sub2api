@@ -467,7 +467,15 @@ export default {
       detailAccuracy: '定位精度',
       detailCoordinates: '坐标',
     },
-    tabs: { usage: '用量明细', errors: '错误请求', ranking: '用户排行' },
+    tabs: { usage: '用量明细', errors: '错误请求', ranking: '用户排行', site: '全站用量' },
+    site: {
+      maskedHint: '全站数据视图：用户名与 Key 名称已脱敏（保留前后各 2 字符，中间以 ** 代替），且不显示 IP 等隐私字段。',
+      maskedHintShort: '用户名称已脱敏',
+      maskBadge: '已脱敏',
+      detail: '全站明细',
+      ranking: '全站排行',
+      loadFailed: '加载全站用量失败',
+    },
     errors: {
       time: '时间', model: '模型', endpoint: '端点', status: '状态码',
       category: '分类', platform: '平台', message: '错误信息',

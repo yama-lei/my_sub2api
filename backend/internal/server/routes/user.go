@@ -114,6 +114,19 @@ func RegisterUserRoutes(
 			usage.POST("/dashboard/api-keys-usage", h.Usage.DashboardAPIKeysUsage)
 		}
 
+		// 全站用量（脱敏只读视图，所有登录用户可见）。
+		// 数据口径与管理端 Usage 页一致，但用户名 / Key 名已脱敏，
+		// 且不支持按 user_id / api_key_id 过滤，避免定向窥探。
+		siteUsage := authenticated.Group("/usage/site")
+		siteUsage.Use(panelRateLimiter.Heavy())
+		{
+			siteUsage.GET("", h.SiteUsage.List)
+			siteUsage.GET("/stats", h.SiteUsage.Stats)
+			siteUsage.GET("/dashboard/snapshot-v2", h.SiteUsage.SnapshotV2)
+			siteUsage.GET("/dashboard/model-stats", h.SiteUsage.ModelStats)
+			siteUsage.GET("/ranking", h.SiteUsage.Ranking)
+		}
+
 		// 公告（用户可见）
 		announcements := authenticated.Group("/announcements")
 		{

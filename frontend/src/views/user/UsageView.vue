@@ -1,6 +1,21 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <div class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
+        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="activeTab = 'usage'">
+          {{ t('usage.tabs.usage') }}
+        </button>
+        <button v-if="errorViewEnabled" class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
+          {{ t('usage.tabs.errors') }}
+        </button>
+        <button class="tab" :class="{ 'tab-active': activeTab === 'site' }" data-testid="usage-site-tab" @click="switchToSite">
+          {{ t('usage.tabs.site') }}
+        </button>
+      </div>
+
+      <!-- 全站用量（脱敏）：独立区块，切换后隐藏个人用量内容 -->
+      <SiteUsagePanel v-if="activeTab === 'site'" />
+      <div v-else class="space-y-6">
       <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
 
       <div class="space-y-4">
@@ -167,15 +182,6 @@
         </div>
       </div>
 
-      <div v-if="errorViewEnabled" class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
-        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="activeTab = 'usage'">
-          {{ t('usage.tabs.usage') }}
-        </button>
-        <button class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
-          {{ t('usage.tabs.errors') }}
-        </button>
-      </div>
-
       <template v-if="activeTab === 'usage'">
         <UsageTable
           :data="usageLogs"
@@ -236,6 +242,7 @@ import EndpointDistributionChart from '@/components/charts/EndpointDistributionC
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import Icon from '@/components/icons/Icon.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
+import SiteUsagePanel from '@/components/user/siteUsage/SiteUsagePanel.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { getBillingModeLabel, getDisplayBillingMode as resolveDisplayBillingMode } from '@/utils/billingMode'
@@ -355,7 +362,7 @@ const modelDistributionMetric = ref<DistributionMetric>('tokens')
 const groupDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionSource = ref<EndpointSource>('inbound')
-const activeTab = ref<'usage' | 'errors'>('usage')
+const activeTab = ref<'usage' | 'errors' | 'site'>('usage')
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)
 
 const filters = ref<UsageQueryParams>({
@@ -895,6 +902,11 @@ const onErrorPageSize = (pageSize: number) => {
 const switchToErrors = () => {
   activeTab.value = 'errors'
   if (errorRows.value.length === 0) void loadErrors()
+}
+
+// 全站用量 tab：独立区块自加载（SiteUsagePanel 内部 onMounted 拉取），离开时中止在途请求
+const switchToSite = () => {
+  activeTab.value = 'site'
 }
 
 onMounted(() => {
