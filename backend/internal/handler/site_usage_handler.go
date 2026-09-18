@@ -437,9 +437,10 @@ func (h *SiteUsageHandler) Stats(c *gin.Context) {
 		return
 	}
 
-	// 全站视图只保留入站端点聚合；上游端点 / 端点路径属管理端内部信息。
+	// 全站视图只保留入站端点聚合；上游端点 / 端点路径 / 账号成本属管理端内部信息。
 	stats.UpstreamEndpoints = nil
 	stats.EndpointPaths = nil
+	stats.TotalAccountCost = nil
 	response.Success(c, stats)
 }
 
