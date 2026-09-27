@@ -48,6 +48,7 @@ func ProvideAdminHandlers(
 	complianceHandler *admin.ComplianceHandler,
 	auditLogHandler *admin.AuditLogHandler,
 	cpaHandler *admin.CpaHandler,
+	modelTraceHandler *admin.ModelTraceHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 ) *AdminHandlers {
@@ -91,6 +92,7 @@ func ProvideAdminHandlers(
 		Compliance:             complianceHandler,
 		AuditLog:               auditLogHandler,
 		Cpa:                    cpaHandler,
+		ModelTrace:             modelTraceHandler,
 	}
 }
 
@@ -292,6 +294,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewComplianceHandler,
 	admin.NewAuditLogHandler,
 	admin.NewCpaHandler,
+	admin.NewModelTraceHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,
