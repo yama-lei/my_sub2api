@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 25 // v25: private relay ownership and supplier settlement rate
+const apiKeyAuthSnapshotVersion = 26 // v26: reload ownership and supplier rate omitted by the v25 auth projection
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
