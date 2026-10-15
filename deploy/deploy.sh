@@ -13,7 +13,7 @@ repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 require_clean_worktree() {
-    if [[ -n $(git status --porcelain) ]]; then
+    if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then
         echo "Deployment refused: uncommitted changes. Commit or stash all changes, including untracked files." >&2
         git status --short >&2
         exit 1

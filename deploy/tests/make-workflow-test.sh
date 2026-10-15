@@ -84,6 +84,7 @@ fi
             subprocess.run(["git", *args], cwd=folder, env=test_env, check=True,
                            capture_output=True)
         git("init")
+        git("config", "status.showUntrackedFiles", "no")
         git("add", ".")
         git("-c", "user.name=Workflow Test", "-c", "user.email=workflow@example.test",
             "-c", "commit.gpgsign=false", "commit", "-m", "fixture")
