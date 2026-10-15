@@ -12,6 +12,16 @@ LOCAL_IMAGE="sub2api:local"
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
+require_clean_worktree() {
+    if [[ -n $(git status --porcelain) ]]; then
+        echo "Deployment refused: uncommitted changes. Commit or stash all changes, including untracked files." >&2
+        git status --short >&2
+        exit 1
+    fi
+}
+require_clean_worktree
+revision=$(git rev-parse --short=12 HEAD)
+
 [[ "$SSH_HOST" =~ ^[a-zA-Z0-9_@.-]+$ && "$SSH_HOST" != -* ]] || exit 1
 [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$SSH_PORT > 0 && 10#$SSH_PORT < 65536 )) || exit 1
 [[ "$REMOTE_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || exit 1
@@ -22,8 +32,6 @@ done
 ssh_args=(-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p "$SSH_PORT")
 ssh "${ssh_args[@]}" "$SSH_HOST" "sudo -n -u $REMOTE_USER bash -c 'set -e; cd $REMOTE_DIR; test -r .env; test -r docker-compose.yml; test \"\$(uname -m)\" = x86_64; command -v python3 >/dev/null; command -v flock >/dev/null; docker compose version; docker inspect $APP_CONTAINER >/dev/null'"
 
-revision=$(git rev-parse --short=12 HEAD)
-if [[ -n $(git status --porcelain) ]]; then revision+=-dirty; fi
 build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 remote_image="sub2api:deploy-$revision-$(date -u +%Y%m%d%H%M%S)"
 printf 'Building current source: %s\n' "$revision"
@@ -31,6 +39,8 @@ docker build --network host --platform linux/amd64 \
     --build-arg COMMIT="$revision" --build-arg DATE="$build_date" \
     --label "org.opencontainers.image.revision=$revision" \
     -t "$LOCAL_IMAGE" -t "$remote_image" .
+require_clean_worktree
+[[ $(git rev-parse --short=12 HEAD) = "$revision" ]] || { echo "Deployment refused: HEAD changed during build." >&2; exit 1; }
 docker save "$remote_image" | gzip | ssh "${ssh_args[@]}" "$SSH_HOST" 'gzip -dc | docker load'
 
 ssh "${ssh_args[@]}" "$SSH_HOST" sudo -n -u "$REMOTE_USER" bash -s -- "$REMOTE_DIR" "$remote_image" "$PROJECT_NAME" "$APP_CONTAINER" <<'REMOTE'

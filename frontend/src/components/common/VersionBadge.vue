@@ -634,6 +634,12 @@
     <span v-else-if="version" class="text-xs text-gray-500 dark:text-dark-400">
       v{{ version }}
     </span>
+    <code
+      v-if="gitCommit"
+      data-testid="git-commit"
+      class="mt-1 block text-[10px] text-gray-500 dark:text-dark-400"
+      :title="`Git commit: ${gitCommit}`"
+    >git {{ gitCommit.slice(0, 12) }}</code>
   </div>
 </template>
 
@@ -654,6 +660,7 @@ import Icon from '@/components/icons/Icon.vue'
 const GITHUB_REPO = 'Wei-Shaw/sub2api'
 // Docker Hub image published by CI (tags carry no "v" prefix, e.g. weishaw/sub2api:0.1.146)
 const DOCKER_IMAGE = 'weishaw/sub2api'
+const gitCommit = __GIT_COMMIT__
 
 const { t } = useI18n()
 

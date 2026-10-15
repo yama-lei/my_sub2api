@@ -14,7 +14,7 @@ database password, fixed JWT/TOTP keys and optional admin credentials. Then use
 the original development stack with a local override. The override uses named
 volumes for NTFS compatibility and Linux host networking during image builds.
 
-Run `make deploy` to build the current working tree for Linux amd64 and update
+Run `make deploy` to build the committed source for Linux amd64 and update
 the existing GCP service over SSH alias `gcp`. It uses Compose project
 `sub2api-deploy` in `/home/rayama114514/op-for-machne/sub2api-deploy`, through
 `sudo -n -u rayama114514`. No local `deploy/.env` or prior build is required.
@@ -26,8 +26,13 @@ its image and the initial full backup are retained, but are not startup entries.
 The active server Compose file points to the new image. All three containers use
 `restart: unless-stopped`.
 
-For subsequent updates, run `make deploy` from the repository root. It builds the
-current working tree (including uncommitted changes), uploads the image, validates
+For subsequent updates, commit your changes and run `make deploy` from the
+repository root. Staged, unstaged or untracked changes cause an immediate failure
+before SSH or Docker runs. The worktree and commit are checked again after the
+build, before upload. The sidebar version badge displays the deployed build's
+12-character Git commit hash for both users and admins.
+
+The command builds the committed source, uploads the image, validates
 the existing server Compose configuration, changes only the application image,
 and runs `docker compose up -d --no-deps --pull never --wait ... sub2api`.
 PostgreSQL and Redis are neither recreated nor restarted. There is no separate

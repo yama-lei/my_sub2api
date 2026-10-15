@@ -49,6 +49,62 @@ chmod +x bin/server
                    env=test_env, check=True, capture_output=True)
     assert (fixture / "events").read_text().splitlines() == ["frontend", "backend", "run"]
 
+# Dirty check must run before SSH or Docker, for staged, unstaged and untracked files.
+for state in ("clean", "unstaged", "staged", "untracked", "dirty-during-build", "head-changed-during-build"):
+    with tempfile.TemporaryDirectory() as directory:
+        folder = Path(directory)
+        (folder / "deploy").mkdir()
+        (folder / "tools").mkdir()
+        shutil.copy(root / "Makefile", folder / "Makefile")
+        shutil.copy(root / "deploy/deploy.sh", folder / "deploy/deploy.sh")
+        (folder / "tracked").write_text("original\n")
+        (folder / ".gitignore").write_text("/tools/\n/events\n")
+        events_file = folder / "events"
+        (folder / "tools/ssh").write_text("""#!/bin/sh
+printf 'ssh\\n' >> "$DEPLOY_EVENTS"
+case "$DEPLOY_STATE" in *during-build) exit 0 ;; esac
+exit 23
+""")
+        (folder / "tools/docker").write_text("""#!/bin/sh
+printf 'docker:%s\\n' "$1" >> "$DEPLOY_EVENTS"
+if [ "$1" = build ]; then
+    case "$DEPLOY_STATE" in
+        dirty-during-build) printf 'changed\\n' > tracked ;;
+        head-changed-during-build)
+            git -c user.name=Test -c user.email=test@example.test -c commit.gpgsign=false commit --allow-empty -m changed >/dev/null ;;
+    esac
+fi
+""")
+        for name in ("ssh", "docker"):
+            (folder / "tools" / name).chmod(0o755)
+        test_env = dict(os.environ, PATH=f"{folder / 'tools'}:{os.environ['PATH']}",
+                        DEPLOY_EVENTS=str(events_file), DEPLOY_STATE=state,
+                        GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        def git(*args):
+            subprocess.run(["git", *args], cwd=folder, env=test_env, check=True,
+                           capture_output=True)
+        git("init")
+        git("add", ".")
+        git("-c", "user.name=Workflow Test", "-c", "user.email=workflow@example.test",
+            "-c", "commit.gpgsign=false", "commit", "-m", "fixture")
+        if state in ("unstaged", "staged"):
+            (folder / "tracked").write_text("changed\n")
+            if state == "staged":
+                git("add", "tracked")
+        elif state == "untracked":
+            (folder / "untracked").write_text("new\n")
+        result = subprocess.run(["make", "deploy"], cwd=folder, env=test_env,
+                                capture_output=True, text=True, timeout=15)
+        events = events_file.read_text().splitlines() if events_file.exists() else []
+        if state == "clean":
+            assert events == ["ssh"], events
+            assert "uncommitted changes" not in result.stderr
+        else:
+            assert result.returncode != 0, state
+            expected_error = "HEAD changed during build" if state == "head-changed-during-build" else "uncommitted changes"
+            assert expected_error in result.stderr, result.stderr
+            assert events == (["ssh", "docker:build"] if state.endswith("during-build") else []), events
+
 # Exercise application-only updates and failure handling without production access.
 remote_program = (root / "deploy/deploy.sh").read_text().split("<<'REMOTE'\n", 1)[1].split("\nREMOTE\n", 1)[0]
 original = """services:
