@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -17,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/typesafe"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
@@ -296,6 +299,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformOpenCodeGo:
 		return DefaultOpenCodeGoModelIDs()
+	case PlatformTypeSafe:
+		return []string{typesafe.JevLatestModel}
 	case PlatformComposite:
 		return compositeDefaultModelsListCandidateIDs()
 	default:
@@ -316,7 +321,13 @@ func defaultAllowImageGenerationForPlatform(platform string) bool {
 func compositeDefaultModelsListCandidateIDs() []string {
 	seen := make(map[string]struct{})
 	ids := make([]string, 0)
-	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformAntigravity, PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo} {
+	for _, platform := range domain.CompositePrecedencePlatformIDs() {
+		// TypeSafe stays out of the static composite candidates (jev-latest only works
+		// through /v1/systemone); groups with TypeSafe accounts still get it from the
+		// account model mappings collected by GetGroupModelsListCandidates.
+		if platform == PlatformTypeSafe {
+			continue
+		}
 		for _, id := range defaultModelsListCandidateIDs(platform) {
 			if _, ok := seen[id]; ok {
 				continue
@@ -552,7 +563,15 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		return nil, err
 	}
 
+	supplierRate := 0.9
+	if input.SupplierRate != nil {
+		if *input.SupplierRate < 0 || *input.SupplierRate > 1 || math.IsNaN(*input.SupplierRate) || math.IsInf(*input.SupplierRate, 0) {
+			return nil, infraerrors.BadRequest("INVALID_SUPPLIER_RATE", "supplier_rate must be between 0 and 1")
+		}
+		supplierRate = *input.SupplierRate
+	}
 	group := &Group{
+		SupplierRate:                    supplierRate,
 		Name:                            input.Name,
 		Description:                     input.Description,
 		Platform:                        platform,
@@ -700,6 +719,9 @@ func (s *adminServiceImpl) validateFallbackGroup(ctx context.Context, currentGro
 		}
 
 		// 降级分组不能启用 claude_code_only，否则会造成死循环
+		if fallbackGroup.IsPrivate() {
+			return errors.New("private relays cannot be fallback targets")
+		}
 		if nextID == fallbackGroupID && fallbackGroup.ClaudeCodeOnly {
 			return fmt.Errorf("fallback group cannot have claude_code_only enabled")
 		}
@@ -733,6 +755,9 @@ func (s *adminServiceImpl) validateFallbackGroupOnInvalidRequest(ctx context.Con
 	if fallbackGroup.Platform != PlatformAnthropic {
 		return fmt.Errorf("fallback group must be anthropic platform")
 	}
+	if fallbackGroup.IsPrivate() {
+		return errors.New("private relays cannot be fallback targets")
+	}
 	if fallbackGroup.SubscriptionType == SubscriptionTypeSubscription {
 		return fmt.Errorf("fallback group cannot be subscription type")
 	}
@@ -759,6 +784,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 
 	// 渠道缓存里存了 groupID → platform 的映射，改了平台要让它失效（见函数末尾）
 	previousPlatform := group.Platform
+	if input.SupplierRate != nil {
+		if *input.SupplierRate < 0 || *input.SupplierRate > 1 || math.IsNaN(*input.SupplierRate) || math.IsInf(*input.SupplierRate, 0) {
+			return nil, infraerrors.BadRequest("INVALID_SUPPLIER_RATE", "supplier_rate must be between 0 and 1")
+		}
+		group.SupplierRate = *input.SupplierRate
+	}
 
 	if input.Name != "" {
 		group.Name = input.Name
@@ -770,12 +801,18 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.Platform = input.Platform
 	}
 	if input.RateMultiplier != nil {
-		if *input.RateMultiplier <= 0 {
+		if *input.RateMultiplier < 0 || (*input.RateMultiplier == 0 && !group.IsPrivate()) {
 			return nil, errors.New("rate_multiplier must be > 0")
+		}
+		if group.IsPrivate() && *input.RateMultiplier != 0 {
+			return nil, infraerrors.BadRequest("PRIVATE_RELAY_FREE", "private relay groups must remain free")
 		}
 		group.RateMultiplier = *input.RateMultiplier
 	}
 	if input.IsExclusive != nil {
+		if group.IsPrivate() && !*input.IsExclusive {
+			return nil, infraerrors.BadRequest("PRIVATE_RELAY_OWNER_ONLY", "private relay groups must remain owner-only")
+		}
 		group.IsExclusive = *input.IsExclusive
 	}
 	if input.Status != "" {
@@ -1046,6 +1083,10 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 	}
 
+	if group.IsPrivate() && (!group.IsExclusive || group.SubscriptionType != SubscriptionTypeStandard || group.RateMultiplier != 0 ||
+		group.FallbackGroupID != nil || group.FallbackGroupIDOnInvalidRequest != nil || group.ProfitControlEnabled) {
+		return nil, infraerrors.BadRequest("INVALID_PRIVATE_RELAY_SETTINGS", "private relays must remain owner-only and free, without fallback or profit control")
+	}
 	if err := s.groupRepo.Update(ctx, group); err != nil {
 		return nil, err
 	}
@@ -1343,6 +1384,10 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 		if err != nil {
 			return nil, err
 		}
+		if group.IsPrivate() && *group.OwnerUserID != apiKey.UserID {
+			return nil, ErrGroupNotAllowed
+		}
+
 		if group.Status != StatusActive {
 			return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
 		}

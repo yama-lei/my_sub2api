@@ -172,6 +172,9 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	if err := lockRelaySettlementUsers(ctx, tx, cmd); err != nil {
+		return err
+	}
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err
@@ -187,16 +190,17 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		result.BalanceOverdrafted = !sufficient
 	}
 
+	// Key 已不存在时跳过其自身的额度/限速计数，其余结算项不受影响。
 	if cmd.APIKeyQuotaCost > 0 {
 		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost)
-		if err != nil {
+		if err != nil && !errors.Is(err, service.ErrAPIKeyNotFound) {
 			return err
 		}
 		result.APIKeyQuotaExhausted = exhausted
 	}
 
 	if cmd.APIKeyRateLimitCost > 0 {
-		if err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost); err != nil {
+		if err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost); err != nil && !errors.Is(err, service.ErrAPIKeyNotFound) {
 			return err
 		}
 	}
@@ -209,7 +213,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		result.QuotaState = quotaState
 	}
 
-	return nil
+	return creditRelaySupplier(ctx, tx, cmd, result)
 }
 
 func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64) error {
@@ -306,6 +310,18 @@ func captureUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 	if cmd.ActualAmount-cmd.HoldAmount > 0.00000001 {
 		return nil, service.ErrBatchImageSettlementCostExceedsHold
 	}
+	var relayCmd *service.UsageBillingCommand
+	if cmd.SupplierUserID != nil && cmd.ActualAmount > 0 {
+		accountID := int64(0)
+		if cmd.AccountID != nil {
+			accountID = *cmd.AccountID
+		}
+		relayCmd = &service.UsageBillingCommand{RequestID: cmd.RequestID, APIKeyID: cmd.APIKeyID, UserID: cmd.UserID,
+			AccountID: accountID, GroupID: cmd.GroupID, SupplierUserID: cmd.SupplierUserID, SupplierRate: cmd.SupplierRate, BalanceCost: cmd.ActualAmount}
+		if err := lockRelaySettlementUsers(ctx, tx, relayCmd); err != nil {
+			return nil, err
+		}
+	}
 	var balance, frozen float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -318,7 +334,15 @@ func captureUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 		RETURNING balance, frozen_balance
 	`, cmd.HoldAmount, cmd.ActualAmount, cmd.UserID).Scan(&balance, &frozen)
 	if err == nil {
-		return &service.BatchImageBalanceHoldResult{NewBalance: &balance, FrozenBalance: &frozen}, nil
+		result := &service.BatchImageBalanceHoldResult{NewBalance: &balance, FrozenBalance: &frozen}
+		if relayCmd != nil {
+			credited := &service.UsageBillingApplyResult{NewBalance: &balance}
+			if err := creditRelaySupplier(ctx, tx, relayCmd, credited); err != nil {
+				return nil, err
+			}
+			result.NewBalance = credited.NewBalance
+		}
+		return result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err

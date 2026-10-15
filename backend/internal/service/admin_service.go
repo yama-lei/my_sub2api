@@ -233,6 +233,7 @@ type AdminBoundAuthIdentityChannel struct {
 }
 
 type CreateGroupInput struct {
+	SupplierRate              *float64
 	Name                      string
 	Description               string
 	Platform                  string
@@ -313,6 +314,7 @@ type CreateGroupInput struct {
 }
 
 type UpdateGroupInput struct {
+	SupplierRate              *float64
 	Name                      string
 	Description               *string
 	Platform                  string
@@ -394,6 +396,8 @@ type UpdateGroupInput struct {
 }
 
 type CreateAccountInput struct {
+	OwnerUserID        *int64
+	Status             string
 	Name               string
 	Notes              *string
 	Platform           string
@@ -541,8 +545,8 @@ type UpdateProxyInput struct {
 	Protocol       string
 	Host           string
 	Port           int
-	Username       string
-	Password       string
+	Username       *string
+	Password       *string
 	Status         string
 	ExpiresAt      *time.Time
 	ClearExpiresAt bool

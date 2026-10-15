@@ -109,6 +109,7 @@ backend/data/
 # ===================
 # 本地配置文件（包含敏感信息）
 # ===================
+/secret.md
 backend/config.yaml
 deploy/config.yaml
 backend/.installed
@@ -141,17 +142,22 @@ docs/*
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/channel-monitor-v2-safe-defaults.md
+!docs/codex-credits.md
+!docs/user-relays.md
 !docs/legal/
 !docs/legal/*.md
 !docs/screenshots/
 docs/screenshots/*
 !docs/screenshots/mobile-account-actions-menu.png
+!docs/screenshots/codex-referral-dialog.png
+!docs/screenshots/codex-referral-success.png
 .serena/
 .codex/
 frontend/coverage/
 aicodex
 output/
 .codegraph/
+issues/
 
 # Vitest / Vite cache at repo root
 .vite/

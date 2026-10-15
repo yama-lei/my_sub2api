@@ -204,6 +204,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/relay',
+    name: 'MyRelay',
+    component: () => import('@/views/user/RelayView.vue'),
+    meta: { requiresAuth: true, title: 'My relay', titleKey: 'relay.title' }
+  },
+  {
     path: '/keys',
     name: 'Keys',
     component: () => import('@/views/user/KeysView.vue'),
@@ -424,18 +430,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Ops Monitoring',
       titleKey: 'admin.ops.title',
       descriptionKey: 'admin.ops.description'
-    }
-  },
-  {
-    path: '/admin/cpa',
-    name: 'AdminCpa',
-    component: () => import('@/views/admin/CpaView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'CPA Panel',
-      titleKey: 'admin.cpa.title',
-      descriptionKey: 'admin.cpa.description'
     }
   },
   {

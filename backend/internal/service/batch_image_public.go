@@ -95,6 +95,8 @@ type BatchImagePublicService struct {
 }
 
 type BatchImagePricingSnapshot struct {
+	SupplierRate            float64
+	IsPublicRelay           bool
 	BaseUnitPrice           float64
 	GroupRateMultiplier     float64
 	AccountRateMultiplier   float64
@@ -257,7 +259,14 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	accountID := account.ID
 	holdID := BatchImageHoldRequestID(batchID)
 	holdAmount := pricingSnapshot.HoldAmount
+	var supplierID *int64
+	if account.OwnerUserID != nil && pricingSnapshot.IsPublicRelay {
+		supplierID = account.OwnerUserID
+	}
 	job, err := s.Repo.CreateBatchImageJob(ctx, CreateBatchImageJobParams{
+		RelayGroupID:            owner.GroupID,
+		SupplierUserID:          supplierID,
+		SupplierRate:            pricingSnapshot.SupplierRate,
 		BatchID:                 batchID,
 		UserID:                  owner.UserID,
 		APIKeyID:                &apiKeyID,
@@ -944,9 +953,10 @@ func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, 
 		if err != nil {
 			return nil, nil, err
 		}
+		// 与普通账号调度一致：priority 数值越小越优先，同优先级按 ID 排序。
 		sort.SliceStable(accounts, func(i, j int) bool {
 			if accounts[i].Priority != accounts[j].Priority {
-				return accounts[i].Priority > accounts[j].Priority
+				return accounts[i].Priority < accounts[j].Priority
 			}
 			return accounts[i].ID < accounts[j].ID
 		})
@@ -997,6 +1007,8 @@ func (s *BatchImagePublicService) ensureGroupAllowsBatchImage(ctx context.Contex
 }
 
 func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, owner BatchImageOwner, req BatchImageSubmitRequest, provider string, account *Account) (*BatchImagePricingSnapshot, error) {
+	supplierRate := 0.0
+	isPublicRelay := false
 	unit := -1.0
 	groupMultiplier := 1.0
 	discountMultiplier := defaultBatchImageDiscountMultiplier
@@ -1012,6 +1024,8 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 		if !group.AllowBatchImageGeneration {
 			return nil, ErrBatchImageGroupDisabled
 		}
+		supplierRate = group.SupplierRate
+		isPublicRelay = group.IsPublicRelay()
 		groupDefaultMultiplier := group.RateMultiplier
 		if groupDefaultMultiplier < 0 {
 			groupDefaultMultiplier = 0
@@ -1029,6 +1043,9 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 		groupMultiplier = effectiveGroupMultiplier
 		if group.ImageRateIndependent {
 			groupMultiplier = group.ImageRateMultiplier
+		}
+		if group.IsPrivate() {
+			groupMultiplier = 0
 		}
 		if groupMultiplier < 0 {
 			groupMultiplier = 0
@@ -1075,6 +1092,8 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 	billableUnitPrice := standardUnitPrice * discountMultiplier
 	holdUnitPrice := standardUnitPrice * holdMultiplier
 	return &BatchImagePricingSnapshot{
+		SupplierRate:            supplierRate,
+		IsPublicRelay:           isPublicRelay,
 		BaseUnitPrice:           unit,
 		GroupRateMultiplier:     groupMultiplier,
 		AccountRateMultiplier:   accountMultiplier,

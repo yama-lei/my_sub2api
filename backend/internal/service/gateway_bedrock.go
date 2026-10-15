@@ -25,6 +25,9 @@ func (s *GatewayService) ApplyBedrockCCCompat(c *gin.Context, body []byte, model
 	if !s.isBedrockCCCompatEnabled(c.Request.Context(), account, groupID) {
 		return body
 	}
+	if resolved, ok := ResolveBedrockModelID(account, model); ok {
+		model = resolved
+	}
 	body = sanitizeBedrockCCFields(body)
 	body = sanitizeBedrockThinking(body, model)
 	body = sanitizeBedrockToolUseIDs(body)
@@ -197,6 +200,7 @@ func (s *GatewayService) executeBedrockUpstream(
 			return nil, err
 		}
 
+		RestrictRelayUpstreamRequest(upstreamReq, account)
 		resp, err = s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, nil)
 		if err != nil {
 			if resp != nil && resp.Body != nil {

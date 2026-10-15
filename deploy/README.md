@@ -2,6 +2,28 @@
 
 This directory contains files for deploying Sub2API on Linux servers and Apple-silicon Macs.
 
+## Local Make Commands
+
+From the repository root, `make run` builds the frontend into `backend/bin/server`
+and starts that single executable. PostgreSQL and Redis must be available; on a
+fresh installation the executable serves the setup wizard at port 8080.
+
+For Docker, first copy `deploy/.env.example` to `deploy/.env` and configure the
+database password, fixed JWT/TOTP keys and optional admin credentials. Then use
+`make docker-build` to build `sub2api:local`, or `make docker-dev` to build and run
+the original development stack with a local override. The override uses named
+volumes for NTFS compatibility and Linux host networking during image builds.
+
+Before `make deploy`, edit `SSH_HOST`, `SSH_PORT`, `APP_PORT`, `BIND_HOST`,
+`REMOTE_DIR`, `PROJECT_NAME` and `LOCAL_IMAGE` at the top of `deploy/deploy.sh`.
+It transfers the already built image over SSH and runs the original server
+Compose with independent container names. Defaults are `gcp`, port 8083 and
+`~/my-sub2api`; the app binds to the server's loopback interface. First-use
+server credentials are generated separately and saved in `~/my-sub2api/.env`.
+Later deployments preserve credentials and data. The image architecture must
+match the server. Access the default deployment through
+`ssh -N -L 8083:127.0.0.1:8083 gcp`, then open `http://localhost:8083`.
+
 ## Deployment Methods
 
 | Method | Best For | Setup Wizard |
@@ -79,8 +101,8 @@ docker compose -f docker-compose.local.yml up -d
 # View logs
 docker compose -f docker-compose.local.yml logs -f sub2api
 
-# If admin password was auto-generated, find it in logs:
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
+# If admin email/password were auto-generated, find them in logs:
+docker compose -f docker-compose.local.yml logs sub2api | grep "Generated admin"
 
 # Access Web UI
 # http://localhost:8080
@@ -112,7 +134,7 @@ mkdir -p data postgres_data redis_data
 # Start all services using local directory version
 docker compose -f docker-compose.local.yml up -d
 
-# View logs (check for auto-generated admin password)
+# View logs (check for auto-generated admin email and password)
 docker compose -f docker-compose.local.yml logs -f sub2api
 
 # Access Web UI
@@ -136,14 +158,14 @@ When using Docker Compose with `AUTO_SETUP=true`:
    - Connects to PostgreSQL and Redis
    - Applies database migrations (SQL files in `backend/migrations/*.sql`) and records them in `schema_migrations`
    - Generates JWT secret (if not provided)
-   - Creates admin account (password auto-generated if not provided)
+   - Creates admin account (email and password auto-generated if not provided; a provided password must be 8-72 bytes)
    - Writes config.yaml
 
 2. No manual Setup Wizard needed - just configure `.env` and start
 
-3. If `ADMIN_PASSWORD` is not set, check logs for the generated password:
+3. If `ADMIN_EMAIL` / `ADMIN_PASSWORD` are not set, check logs for the generated admin email (login username) and password:
    ```bash
-   docker compose logs sub2api | grep "admin password"
+   docker compose logs sub2api | grep "Generated admin"
    ```
 
 ### Startup and Database Recovery
@@ -257,8 +279,8 @@ docker compose down -v
 | `JWT_SECRET` | **Recommended** | *(auto-generated)* | JWT secret (fixed for persistent sessions) |
 | `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
 | `SERVER_PORT` | No | `8080` | Server port |
-| `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
-| `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
+| `ADMIN_EMAIL` | No | *(auto-generated)* | Admin email (login username) |
+| `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password (8-72 bytes) |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
