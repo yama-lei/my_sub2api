@@ -34,7 +34,7 @@ func lockRelaySettlementUsers(ctx context.Context, tx *sql.Tx, cmd *service.Usag
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	count := 0
 	for rows.Next() {
 		count++

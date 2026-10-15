@@ -150,7 +150,11 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		if err = urlvalidator.ValidateResolvedIP(parsed.Hostname()); err != nil {
 			return nil, 0, nil, err
 		}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
+		defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			return nil, 0, nil, fmt.Errorf("unexpected default transport type %T", http.DefaultTransport)
+		}
+		transport := defaultTransport.Clone()
 		transport.Proxy = nil
 		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 			return urlvalidator.DialPublicContext(ctx, network, address, (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext)
