@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageCell from '../AccountUsageCell.vue'
 import type { Account } from '@/types'
+import { adminAPI } from '@/api/admin'
+import { accountWorkspaceKey, type AccountWorkspace } from '@/composables/useAccountWorkspace'
 
 const { getUsage } = vi.hoisted(() => ({
   getUsage: vi.fn()
@@ -113,6 +115,39 @@ const cnUsageCellStubs = {
 }
 
 describe('AccountUsageCell', () => {
+  it.each(['openai', 'anthropic'] as const)('queries native %s usage through the relay workspace without Admin controls', async (platform) => {
+    const relayGetUsage = vi.fn().mockResolvedValue({
+      source: 'active', five_hour: { utilization: 25 }, seven_day: { utilization: 50 }
+    })
+    const workspace: AccountWorkspace = {
+      isRelay: true, basePath: '/relay',
+      api: { ...adminAPI, accounts: { ...adminAPI.accounts, getUsage: relayGetUsage } }
+    }
+    const nativeAccount = makeAccount({ id: platform === 'openai' ? 9101 : 9102, platform, type: 'oauth' })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: nativeAccount },
+      global: {
+        provide: { [accountWorkspaceKey as symbol]: workspace },
+        stubs: { ClaudeResetCreditsCell: true, OpenAIQuotaResetCell: true }
+      }
+    })
+    await flushPromises()
+    if (platform === 'anthropic') {
+      expect(relayGetUsage).toHaveBeenCalledWith(nativeAccount.id, 'passive', false)
+    } else {
+      expect(relayGetUsage).toHaveBeenCalledWith(nativeAccount.id)
+    }
+    expect(wrapper.text()).toContain('25%')
+    expect(wrapper.text()).toContain('50%')
+    expect(wrapper.findComponent({ name: 'ClaudeResetCreditsCell' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'OpenAIQuotaResetCell' }).exists()).toBe(false)
+    await wrapper.get('[data-testid="account-usage-query"]').trigger('click')
+    await flushPromises()
+    expect(relayGetUsage).toHaveBeenLastCalledWith(nativeAccount.id, 'active', true)
+    expect(getUsage).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('renders native Qoder usage in the shared usage column', () => {
     const wrapper = mount(AccountUsageCell, {
       props: { account: makeAccount({ platform: 'qoder', type: 'oauth' }), manualRefreshToken: 7 },

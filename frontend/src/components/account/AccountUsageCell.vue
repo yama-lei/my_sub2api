@@ -88,7 +88,7 @@
         while usage is still loading survives the usage response. The local query
         button shares its row once usage data exists.
       -->
-      <ClaudeResetCreditsCell :account="account" class="mt-1" @redeemed="loadActiveUsage">
+      <ClaudeResetCreditsCell v-if="!isRelay" :account="account" class="mt-1" @redeemed="loadActiveUsage">
         <template v-if="usageInfo" #pre-actions>
           <span
             v-if="usageInfo.source === 'passive'"
@@ -120,6 +120,17 @@
           </button>
         </template>
       </ClaudeResetCreditsCell>
+      <button
+        v-else
+        type="button"
+        data-testid="account-usage-query"
+        class="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        :disabled="loading || activeQueryLoading"
+        @click="loadActiveUsage"
+      >
+        <Icon name="refresh" size="xs" :class="{ 'animate-spin': activeQueryLoading }" />
+        {{ t('admin.accounts.usageWindow.activeQuery') }}
+      </button>
     </template>
 
     <!-- OpenAI OAuth accounts: single source from /usage API -->
@@ -149,7 +160,7 @@
           refresh button is rendered via the pre-actions slot so the user sees a
           single row of related buttons instead of two stacked rows.
         -->
-        <OpenAIQuotaResetCell :account="account" @account-updated="handleQuotaResetAccountUpdated">
+        <OpenAIQuotaResetCell v-if="!isRelay" :account="account" @account-updated="handleQuotaResetAccountUpdated">
           <template #pre-actions>
             <button
               type="button"
@@ -192,11 +203,24 @@
         <div class="text-xs text-gray-400">-</div>
         <!-- Always allow on-demand upstream quota query, even before local data exists. -->
         <OpenAIQuotaResetCell
+          v-if="!isRelay"
           :account="account"
           class="mt-1"
           @account-updated="handleQuotaResetAccountUpdated"
         />
       </div>
+      <div v-if="isRelay && error" role="alert" class="text-xs text-red-600 dark:text-red-400">{{ error }}</div>
+      <button
+        v-if="isRelay"
+        type="button"
+        data-testid="account-usage-query"
+        class="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        :disabled="loading || activeQueryLoading"
+        @click="loadActiveUsage"
+      >
+        <Icon name="refresh" size="xs" :class="{ 'animate-spin': activeQueryLoading }" />
+        {{ t('admin.accounts.usageWindow.activeQuery') }}
+      </button>
     </template>
 
     <QoderUsageCell
@@ -683,7 +707,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { adminAPI } from '@/api/admin'
+import { useAccountWorkspace } from '@/composables/useAccountWorkspace'
+import Icon from '@/components/icons/Icon.vue'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
@@ -705,7 +730,7 @@ import OpenCodeGoUsageCell from './OpenCodeGoUsageCell.vue'
 import QoderUsageCell from './QoderUsageCell.vue'
 
 // Module-level cache shared across all AccountUsageCell instances
-const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
+const _usageCache = new Map<string, { data: AccountUsageInfo; ts: number }>()
 const USAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 const props = withDefaults(
@@ -736,6 +761,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { api: accountAPI, isRelay, basePath } = useAccountWorkspace()
+const usageCacheKey = computed(() => `${basePath}:${props.account.id}`)
 const desktopViewportQuery = '(min-width: 768px)'
 
 const unmounted = ref(false)
@@ -1422,7 +1449,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
 
   // Check cache
   if (!options?.bypassCache) {
-    const cached = _usageCache.get(props.account.id)
+    const cached = _usageCache.get(usageCacheKey.value)
     if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL) {
       usageInfo.value = cached.data
       loading.value = false
@@ -1434,13 +1461,13 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   error.value = null
 
   try {
-		const fetchFn = () => options?.source
-			? adminAPI.accounts.getUsage(props.account.id, options.source, options.bypassCache === true)
-			: adminAPI.accounts.getUsage(props.account.id)
+    const fetchFn = () => options?.source || options?.bypassCache
+      ? accountAPI.accounts.getUsage(props.account.id, options.source, options.bypassCache === true)
+      : accountAPI.accounts.getUsage(props.account.id)
     const result = await enqueueUsageRequest(props.account, fetchFn)
     if (!unmounted.value) {
       usageInfo.value = result
-      _usageCache.set(props.account.id, { data: result, ts: Date.now() })
+      _usageCache.set(usageCacheKey.value, { data: result, ts: Date.now() })
     }
   } catch (e: any) {
     if (!unmounted.value) {
@@ -1504,9 +1531,11 @@ const attachVisibilityObserver = () => {
 
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
+  error.value = null
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    usageInfo.value = await accountAPI.accounts.getUsage(props.account.id, 'active', true)
   } catch (e: any) {
+    error.value = t('common.error')
     console.error('Failed to load active usage:', e)
   } finally {
     activeQueryLoading.value = false
@@ -1684,7 +1713,7 @@ watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
     return
   }
 
-  _usageCache.delete(props.account.id)
+  _usageCache.delete(usageCacheKey.value)
   requestAutoLoad()
 })
 
@@ -1700,7 +1729,7 @@ watch(
     }
 
     const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
-    _usageCache.delete(props.account.id)
+    _usageCache.delete(usageCacheKey.value)
     loadUsage({ source, bypassCache: true }).catch((e) => {
       console.error('Failed to refresh usage after manual refresh:', e)
     })
