@@ -9,6 +9,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/keys.bulkUpdate.spec.ts \
 	src/api/__tests__/qoderUsage.spec.ts \
 	src/api/__tests__/relayAccountWorkspace.spec.ts \
+	src/api/__tests__/relayQuotaReset.spec.ts \
 	src/components/account/__tests__/OpenAIReferralCell.spec.ts \
 	src/components/account/__tests__/OpenAIReferralCell.transport.spec.ts \
 	src/components/account/__tests__/OpenAIQuotaResetCell.spark_shadow.spec.ts \
@@ -20,6 +21,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/account/__tests__/QoderOAuthFlow.spec.ts \
 	src/components/account/__tests__/QoderUsageCell.spec.ts \
 	src/components/account/__tests__/AccountUsageCell.spec.ts \
+	src/components/account/__tests__/ClaudeResetCreditsCell.spec.ts \
 	src/components/account/__tests__/OpenCodeGoProtocolRulesEditor.spec.ts \
 	src/components/keys/__tests__/BulkEditKeysModal.spec.ts \
 	src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts \

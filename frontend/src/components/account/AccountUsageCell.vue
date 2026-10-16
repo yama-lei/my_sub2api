@@ -88,16 +88,17 @@
         while usage is still loading survives the usage response. The local query
         button shares its row once usage data exists.
       -->
-      <ClaudeResetCreditsCell v-if="!isRelay" :account="account" class="mt-1" @redeemed="loadActiveUsage">
-        <template v-if="usageInfo" #pre-actions>
+      <ClaudeResetCreditsCell :account="account" :base-path="basePath" class="mt-1" @redeemed="loadActiveUsage">
+        <template #pre-actions>
           <span
-            v-if="usageInfo.source === 'passive'"
+            v-if="usageInfo?.source === 'passive'"
             class="text-[9px] text-gray-400 dark:text-gray-500 italic"
           >
             {{ t('admin.accounts.usageWindow.passiveSampled') }}
           </span>
           <button
             type="button"
+            data-testid="account-usage-query"
             class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="activeQueryLoading"
             @click="loadActiveUsage"
@@ -120,17 +121,6 @@
           </button>
         </template>
       </ClaudeResetCreditsCell>
-      <button
-        v-else
-        type="button"
-        data-testid="account-usage-query"
-        class="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
-        :disabled="loading || activeQueryLoading"
-        @click="loadActiveUsage"
-      >
-        <Icon name="refresh" size="xs" :class="{ 'animate-spin': activeQueryLoading }" />
-        {{ t('admin.accounts.usageWindow.activeQuery') }}
-      </button>
     </template>
 
     <!-- OpenAI OAuth accounts: single source from /usage API -->
@@ -160,10 +150,11 @@
           refresh button is rendered via the pre-actions slot so the user sees a
           single row of related buttons instead of two stacked rows.
         -->
-        <OpenAIQuotaResetCell v-if="!isRelay" :account="account" @account-updated="handleQuotaResetAccountUpdated">
+        <OpenAIQuotaResetCell :account="account" :base-path="basePath" @account-updated="handleQuotaResetAccountUpdated">
           <template #pre-actions>
             <button
               type="button"
+              data-testid="account-usage-query"
               class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="activeQueryLoading"
               @click="loadActiveUsage"
@@ -203,24 +194,13 @@
         <div class="text-xs text-gray-400">-</div>
         <!-- Always allow on-demand upstream quota query, even before local data exists. -->
         <OpenAIQuotaResetCell
-          v-if="!isRelay"
           :account="account"
+          :base-path="basePath"
           class="mt-1"
           @account-updated="handleQuotaResetAccountUpdated"
         />
       </div>
       <div v-if="isRelay && error" role="alert" class="text-xs text-red-600 dark:text-red-400">{{ error }}</div>
-      <button
-        v-if="isRelay"
-        type="button"
-        data-testid="account-usage-query"
-        class="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
-        :disabled="loading || activeQueryLoading"
-        @click="loadActiveUsage"
-      >
-        <Icon name="refresh" size="xs" :class="{ 'animate-spin': activeQueryLoading }" />
-        {{ t('admin.accounts.usageWindow.activeQuery') }}
-      </button>
     </template>
 
     <QoderUsageCell
@@ -708,7 +688,6 @@
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAccountWorkspace } from '@/composables/useAccountWorkspace'
-import Icon from '@/components/icons/Icon.vue'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'

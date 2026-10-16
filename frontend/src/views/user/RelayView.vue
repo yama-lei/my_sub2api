@@ -74,6 +74,7 @@
                     v-if="supportsUsageWindow(account)"
                     :account="account"
                     :manual-refresh-token="usageRefreshToken"
+                    @account-updated="handleAccountUpdated"
                   />
                   <span v-else class="text-xs text-gray-400 dark:text-gray-500">—</span>
                 </td>
@@ -206,6 +207,10 @@ async function load() {
 async function refresh() {
   await load()
   usageRefreshToken.value++
+}
+
+function handleAccountUpdated(updated: Account) {
+  accounts.value = accounts.value.map(account => account.id === updated.id ? updated : account)
 }
 
 function openAccount(account?: Account) {

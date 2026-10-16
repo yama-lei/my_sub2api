@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageCell from '../AccountUsageCell.vue'
 import type { Account } from '@/types'
@@ -115,7 +116,7 @@ const cnUsageCellStubs = {
 }
 
 describe('AccountUsageCell', () => {
-  it.each(['openai', 'anthropic'] as const)('queries native %s usage through the relay workspace without Admin controls', async (platform) => {
+  it.each(['openai', 'anthropic'] as const)('queries native %s usage and scopes quota controls to the relay workspace', async (platform) => {
     const relayGetUsage = vi.fn().mockResolvedValue({
       source: 'active', five_hour: { utilization: 25 }, seven_day: { utilization: 50 }
     })
@@ -128,7 +129,9 @@ describe('AccountUsageCell', () => {
       props: { account: nativeAccount },
       global: {
         provide: { [accountWorkspaceKey as symbol]: workspace },
-        stubs: { ClaudeResetCreditsCell: true, OpenAIQuotaResetCell: true }
+        stubs: Object.fromEntries(['ClaudeResetCreditsCell', 'OpenAIQuotaResetCell'].map(name => [name, defineComponent({
+          name, props: ['account', 'basePath'], template: '<div><slot name="pre-actions" /></div>'
+        })]))
       }
     })
     await flushPromises()
@@ -139,8 +142,8 @@ describe('AccountUsageCell', () => {
     }
     expect(wrapper.text()).toContain('25%')
     expect(wrapper.text()).toContain('50%')
-    expect(wrapper.findComponent({ name: 'ClaudeResetCreditsCell' }).exists()).toBe(false)
-    expect(wrapper.findComponent({ name: 'OpenAIQuotaResetCell' }).exists()).toBe(false)
+    const quotaControl = wrapper.findComponent({ name: platform === 'openai' ? 'OpenAIQuotaResetCell' : 'ClaudeResetCreditsCell' })
+    expect(quotaControl.props('basePath')).toBe('/relay')
     await wrapper.get('[data-testid="account-usage-query"]').trigger('click')
     await flushPromises()
     expect(relayGetUsage).toHaveBeenLastCalledWith(nativeAccount.id, 'active', true)

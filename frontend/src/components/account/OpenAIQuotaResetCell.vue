@@ -73,7 +73,7 @@
         {{ t('admin.accounts.openaiQuotaReset.points') }}
         <span class="truncate tabular-nums">{{ creditsDisplay }}</span>
       </button>
-      <OpenAIReferralCell :account="account" />
+      <OpenAIReferralCell v-if="basePath === '/admin'" :account="account" />
     </div>
 
     <div v-if="creditsCacheWarning" class="text-[10px] text-amber-600 dark:text-amber-400">
@@ -193,9 +193,10 @@ import {
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import OpenAIReferralCell from '@/components/account/OpenAIReferralCell.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   account: Account
-}>()
+  basePath?: '/admin' | '/relay'
+}>(), { basePath: '/admin' })
 
 const emit = defineEmits<{
   'account-updated': [account: Account]
@@ -442,7 +443,7 @@ const handleQuery = async () => {
   resetWarning.value = null
   showResetCreditDetails.value = false
   try {
-    const result = await refreshOpenAIQuota(accountID)
+    const result = await refreshOpenAIQuota(accountID, props.basePath)
     if (props.account.id !== accountID) return
     updateCredits(result)
     creditsCacheWarning.value = result.credits_cache_persisted === false
@@ -486,7 +487,7 @@ const confirmReset = async () => {
   resetMessage.value = null
   resetWarning.value = null
   try {
-    const result: OpenAIQuotaResetResult = await resetOpenAIQuota(accountID)
+    const result: OpenAIQuotaResetResult = await resetOpenAIQuota(accountID, props.basePath)
     if (props.account.id !== accountID) return
     updateCredits(result.quota ?? null)
     showResetCreditDetails.value = false
