@@ -29,6 +29,12 @@ function mountView() {
     BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
     CreateAccountModal: sharedForm('CreateAccountModal'), EditAccountModal: sharedForm('EditAccountModal'), ReAuthAccountModal: sharedForm('ReAuthAccountModal'),
     AccountTestModal: sharedForm('AccountTestModal'), AccountStatsModal: sharedForm('AccountStatsModal'), AccountStatusIndicator: true,
+    AccountUsageCell: defineComponent({
+      name: 'AccountUsageCell',
+      props: ['account', 'manualRefreshToken'],
+      setup: () => ({ scope: inject(accountWorkspaceKey)?.basePath }),
+      template: '<div data-testid="relay-usage-cell" :data-scope="scope" />'
+    }),
     ConfirmDialog: true, RouterLink: { template: '<a><slot /></a>' }
   } } })
   return wrapper
@@ -47,6 +53,29 @@ async function click(view: VueWrapper, text: string) {
 }
 
 describe('My relay shared account flows', () => {
+  it('places native account usage immediately before actions and refreshes the usage cells', async () => {
+    const nativeAccounts = [account,
+      { ...account, id: 4, platform: 'anthropic', name: 'Claude' },
+      { ...account, id: 5, platform: 'qoder', name: 'Qoder' },
+      { ...account, id: 6, platform: 'anthropic', type: 'setup-token', name: 'Claude Setup' },
+      { ...account, id: 7, type: 'apikey', name: 'API Key' }
+    ]
+    api.accounts.mockResolvedValue({ items: nativeAccounts, total: nativeAccounts.length })
+    const view = mountView(); await flushPromises()
+    const table = view.get('[data-testid="relay-accounts-table"]')
+    const headers = table.findAll('th')
+    expect(headers.at(-2)?.text()).toBe('admin.accounts.columns.usageWindows')
+    expect(headers.at(-1)?.text()).toBe('common.actions')
+    const usageCells = view.findAllComponents({ name: 'AccountUsageCell' })
+    expect(usageCells.map(cell => cell.props('account').id)).toEqual([3, 4, 5, 6])
+    expect(usageCells.every(cell => cell.attributes('data-scope') === '/relay')).toBe(true)
+    expect(table.findAll('tbody tr').every(row => row.findAll('td').length === headers.length)).toBe(true)
+    expect(usageCells[0].props('manualRefreshToken')).toBe(0)
+    await click(view, 'relay.refresh')
+    await flushPromises()
+    expect(usageCells.every(cell => cell.props('manualRefreshToken') === 1)).toBe(true)
+  })
+
   it('uses the Admin creation component, with a user scope and only a private default group', async () => {
     const view = mountView(); await flushPromises()
     await click(view, 'relay.addAccount')

@@ -6,7 +6,7 @@
           <h1 class="text-2xl font-semibold">{{ t('relay.title') }}</h1>
           <p class="mt-1 text-sm text-gray-500">{{ t('relay.description') }}</p>
         </div>
-        <button class="btn btn-secondary" :disabled="loading" @click="load">{{ t('relay.refresh') }}</button>
+        <button class="btn btn-secondary" :disabled="loading" @click="refresh">{{ t('relay.refresh') }}</button>
       </div>
       <div class="rounded-xl bg-primary-50 p-4 text-sm dark:bg-dark-800">
         <p>{{ t('relay.privateNotice') }}</p>
@@ -49,8 +49,17 @@
         </div>
         <p v-if="!accounts.length && !loading" class="py-8 text-center text-gray-500">{{ t('relay.emptyAccounts') }}</p>
         <div v-else class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead><tr class="border-b dark:border-dark-600"><th class="p-3">{{ t('relay.name') }}</th><th class="p-3">{{ t('relay.platform') }}</th><th class="p-3">{{ t('relay.groups') }}</th><th class="p-3">{{ t('relay.status') }}</th><th class="p-3">{{ t('common.actions') }}</th></tr></thead>
+          <table class="w-full text-left text-sm" data-testid="relay-accounts-table">
+            <thead>
+              <tr class="border-b dark:border-dark-600">
+                <th scope="col" class="p-3">{{ t('relay.name') }}</th>
+                <th scope="col" class="p-3">{{ t('relay.platform') }}</th>
+                <th scope="col" class="p-3">{{ t('relay.groups') }}</th>
+                <th scope="col" class="p-3">{{ t('relay.status') }}</th>
+                <th scope="col" class="p-3">{{ t('admin.accounts.columns.usageWindows') }}</th>
+                <th scope="col" class="p-3">{{ t('common.actions') }}</th>
+              </tr>
+            </thead>
             <tbody>
               <tr v-for="account in accounts" :key="account.id" class="border-b dark:border-dark-600">
                 <td class="p-3">{{ account.name }}<span class="ml-2 text-xs text-gray-500">#{{ account.id }}</span></td>
@@ -60,6 +69,15 @@
                   <p class="text-xs text-gray-500">{{ isShared(account) ? t('relay.shared') : t('relay.privateOnly') }}</p>
                 </td>
                 <td class="p-3"><AccountStatusIndicator :account="account" /></td>
+                <td class="min-w-[200px] p-3">
+                  <AccountUsageCell
+                    v-if="supportsUsageWindow(account)"
+                    :account="account"
+                    :manual-refresh-token="usageRefreshToken"
+                    @account-updated="handleAccountUpdated"
+                  />
+                  <span v-else class="text-xs text-gray-400 dark:text-gray-500">—</span>
+                </td>
                 <td class="p-3"><div class="flex flex-wrap gap-2">
                   <button class="btn btn-secondary btn-sm" @click="openAccount(account)">{{ t('common.edit') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="openAction(account, 'test')">{{ t('admin.accounts.testConnection') }}</button>
@@ -127,6 +145,7 @@ import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vu
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
+import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import { accountWorkspaceKey } from '@/composables/useAccountWorkspace'
 import { relayAccountWorkspace } from '@/api/relayAccountWorkspace'
 
@@ -152,6 +171,7 @@ const showTest = ref(false)
 const showStats = ref(false)
 const actionAccount = ref<Account | null>(null)
 const refreshingID = ref<number | null>(null)
+const usageRefreshToken = ref(0)
 const accountGroups = computed(() => [...privateGroups.value, ...publicGroups.value])
 const showGroup = ref(false)
 const pendingDelete = ref<{ kind: 'account' | 'group'; id: number } | null>(null)
@@ -167,6 +187,9 @@ const groupLabel = (id: number) => {
   return group ? displayName(group) : `#${id}`
 }
 const isShared = (account: Account) => (account.group_ids || []).some(id => publicGroups.value.some(group => group.id === id))
+const supportsUsageWindow = (account: Account) =>
+  (['qoder', 'openai', 'anthropic'].includes(account.platform) && account.type === 'oauth') ||
+  (account.platform === 'anthropic' && account.type === 'setup-token')
 
 async function load() {
   loading.value = true
@@ -179,6 +202,15 @@ async function load() {
     earnings.value = income
   } catch { app.showError(t('relay.loadFailed')) }
   finally { loading.value = false }
+}
+
+async function refresh() {
+  await load()
+  usageRefreshToken.value++
+}
+
+function handleAccountUpdated(updated: Account) {
+  accounts.value = accounts.value.map(account => account.id === updated.id ? updated : account)
 }
 
 function openAccount(account?: Account) {

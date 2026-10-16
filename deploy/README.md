@@ -14,6 +14,9 @@ database password, fixed JWT/TOTP keys and optional admin credentials. Then use
 the original development stack with a local override. The override uses named
 volumes for NTFS compatibility and Linux host networking during image builds.
 
+For native Qoder CN OAuth accounts, model discovery and Credits usage, see
+[Qoder channel support](QODER.md).
+
 Run `make deploy` to build the committed source for Linux amd64 and update
 the existing GCP service over SSH alias `gcp`. It uses Compose project
 `sub2api-deploy` in `/home/rayama114514/op-for-machne/sub2api-deploy`, through

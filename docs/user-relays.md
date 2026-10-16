@@ -18,6 +18,8 @@
 
 ## 凭证与分组
 
+「我的上游账号」表格在操作列前显示用量窗口，支持 Qoder Credits、GPT/Codex OAuth 和 Claude OAuth/Setup Token。查询仅访问本人账号；GPT/Codex 与 Claude OAuth 还可查询剩余重置次数，并在确认后使用上游额度重置功能。页面刷新同时更新用量窗口。
+
 - API Key：选择平台，填写上游 API Key。官方地址可以留空，外部中转站填写公网 HTTP(S) 地址。
 - OAuth：复用 Admin 账号管理的授权表单与平台 OAuth 流程，包括授权链接/授权码、Claude Cookie/Setup Token、OpenAI Refresh Token/Codex 会话/PAT、Gemini、Antigravity 和 Grok 登录方式。也可导入 Token；重新授权、刷新令牌、连接测试、模型同步与用量统计使用同一套组件和服务。
 - 用户界面不提供平台代理、调度优先级、账单倍率、全站 TLS 指纹配置及付费额度自动重置设置。Bedrock / Vertex Service Account 同样复用原有凭证表单；用户必须提供自己的密钥，Vertex Token 缓存按用户隔离。
