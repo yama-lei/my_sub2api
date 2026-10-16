@@ -152,10 +152,10 @@
             data-testid="qoder-platform-select"
             @click="form.platform = 'qoder'"
             :class="[
-              'flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-medium',
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'qoder'
-                ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
-                : 'border-gray-200 bg-white text-gray-600 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-400'
+                ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600 dark:text-primary-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
             <PlatformIcon platform="qoder" size="sm" />
