@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/qoder"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
@@ -111,6 +112,24 @@ func newQuotaFetcherTestSetup(t *testing.T) (*ChannelMonitorQuotaFetcher, *stubM
 }
 
 // --- 分派 ---
+
+func TestQoderQuotaMonitorUsesCreditsFromExistingUsageService(t *testing.T) {
+	fetcher, usage, _, _, accounts := newQuotaFetcherTestSetup(t)
+	accounts.accounts[7] = &Account{ID: 7, Platform: PlatformQoder, Type: AccountTypeOAuth}
+	total := 100.0
+	reset := time.Now().Add(24 * time.Hour).UTC()
+	usage.usage = &UsageInfo{SubscriptionTier: "Pro", QoderCredits: &QoderCreditsAccount{
+		State: "fresh", Credits: &qoder.CreditsSnapshot{PeriodEndAt: &reset,
+			Subscription: qoder.CreditPool{Total: &total, Used: 90, Remaining: 10}},
+	}}
+	snapshot := fetcher.Fetch(context.Background(), 7)
+	require.True(t, snapshot.Success)
+	require.Equal(t, "Pro", snapshot.PlanLevel)
+	require.Len(t, snapshot.Tiers, 1)
+	require.Equal(t, "Credits", snapshot.Tiers[0].Label)
+	require.Equal(t, 90.0, snapshot.Tiers[0].UsedPercent)
+	require.Equal(t, reset.Format(time.RFC3339), snapshot.Tiers[0].ResetAt)
+}
 
 func TestQuotaFetcher_OverseasAccountUsesUsageService(t *testing.T) {
 	fetcher, usage, _, cnQuota, accounts := newQuotaFetcherTestSetup(t)

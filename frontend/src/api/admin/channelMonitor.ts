@@ -10,6 +10,7 @@ export type Provider =
   | 'anthropic'
   | 'gemini'
   | 'grok'
+  | 'qoder'
   | 'antigravity'
   | 'kimi'
   | 'zhipu'

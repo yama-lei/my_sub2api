@@ -52,6 +52,15 @@ func registerRelayAccountRoutes(relay *gin.RouterGroup, h *handler.Handlers) {
 	antigravity.POST("/exchange-code", h.Admin.AntigravityOAuth.ExchangeCode)
 	antigravity.POST("/refresh-token", h.Admin.AntigravityOAuth.RefreshToken)
 
+	if h.Admin.QoderOAuth != nil {
+		qoder := relay.Group("/qoder/oauth")
+		qoder.POST("/start", h.Admin.QoderOAuth.Begin)
+		qoder.POST("/poll", h.Admin.QoderOAuth.Poll)
+		qoder.POST("/cancel", h.Admin.QoderOAuth.Cancel)
+		qoder.POST("/commit", h.Admin.QoderOAuth.Commit)
+		relay.GET("/qoder/credits/accounts/:id", h.Relay.RequireOwnedAccount, h.Admin.QoderOAuth.AccountCredits)
+	}
+
 	grok := relay.Group("/grok")
 	grok.GET("/oauth/capabilities", h.Admin.GrokOAuth.GetCapabilities)
 	grok.POST("/oauth/auth-url", h.Admin.GrokOAuth.GenerateAuthURL)

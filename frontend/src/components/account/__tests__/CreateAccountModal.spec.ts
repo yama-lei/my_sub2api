@@ -148,6 +148,12 @@ function mountModal(groups: any[] = [], workspace?: AccountWorkspace) {
       stubs: {
         BaseDialog: BaseDialogStub,
         OAuthAuthorizationFlow: OAuthAuthorizationFlowStub,
+        QoderOAuthFlow: defineComponent({
+          name: 'QoderOAuthFlow',
+          props: ['input'],
+          emits: ['completed'],
+          template: '<button data-testid="qoder-auth-complete" @click="$emit(\'completed\', 17)">authorize</button>'
+        }),
         ConfirmDialog: true,
         Select: true,
         Icon: true,
@@ -221,6 +227,32 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it('creates Qoder through the shared OAuth step in a relay workspace', async () => {
+    const relayCreate = vi.fn()
+    const wrapper = mountModal([
+      { id: 1, name: 'Private Qoder', platform: 'qoder', status: 'active' },
+      { id: 2, name: 'Shared Qoder', platform: 'qoder', status: 'active' }
+    ], {
+      api: { ...adminAPI, accounts: { ...adminAPI.accounts, create: relayCreate } },
+      isRelay: true, basePath: '/relay'
+    })
+    await wrapper.get('[data-testid="qoder-platform-select"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Private Qoder')
+    await wrapper.get('[data-testid="select-pricing-groups"]').trigger('click')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'QoderOAuthFlow' }).props('input')).toMatchObject({
+      name: 'Private Qoder', group_ids: [1, 2], concurrency: 2
+    })
+    expect(wrapper.findComponent({ name: 'OAuthAuthorizationFlow' }).exists()).toBe(false)
+    await wrapper.get('[data-testid="qoder-auth-complete"]').trigger('click')
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(relayCreate).not.toHaveBeenCalled()
+    expect(createAccountMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 
   it('reuses the creation form in a relay scope without Admin-only fields or Admin writes', async () => {
     const relayCreate = vi.fn().mockResolvedValue({ id: 7, platform: 'openai', type: 'apikey' })
