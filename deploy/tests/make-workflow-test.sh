@@ -13,7 +13,6 @@ import subprocess
 import tempfile
 
 root = Path.cwd()
-docker_executable = shutil.which("docker")
 env = dict(os.environ, POSTGRES_PASSWORD="workflow-check-only")
 render = subprocess.run(
     ["docker", "compose", "--env-file", "/dev/null", "-p", "sub2api-dev",
@@ -50,45 +49,175 @@ chmod +x bin/server
                    env=test_env, check=True, capture_output=True)
     assert (fixture / "events").read_text().splitlines() == ["frontend", "backend", "run"]
 
-# Exercise server credential persistence without SSH or real Docker operations.
+# Dirty check must run before SSH or Docker, for staged, unstaged and untracked files.
+for state in ("clean", "unstaged", "staged", "untracked", "dirty-during-build", "head-changed-during-build"):
+    with tempfile.TemporaryDirectory() as directory:
+        folder = Path(directory)
+        (folder / "deploy").mkdir()
+        (folder / "tools").mkdir()
+        shutil.copy(root / "Makefile", folder / "Makefile")
+        shutil.copy(root / "deploy/deploy.sh", folder / "deploy/deploy.sh")
+        (folder / "tracked").write_text("original\n")
+        (folder / ".gitignore").write_text("/tools/\n/events\n")
+        events_file = folder / "events"
+        (folder / "tools/ssh").write_text("""#!/bin/sh
+printf 'ssh\\n' >> "$DEPLOY_EVENTS"
+case "$DEPLOY_STATE" in *during-build) exit 0 ;; esac
+exit 23
+""")
+        (folder / "tools/docker").write_text("""#!/bin/sh
+printf 'docker:%s\\n' "$1" >> "$DEPLOY_EVENTS"
+if [ "$1" = build ]; then
+    case "$DEPLOY_STATE" in
+        dirty-during-build) printf 'changed\\n' > tracked ;;
+        head-changed-during-build)
+            git -c user.name=Test -c user.email=test@example.test -c commit.gpgsign=false commit --allow-empty -m changed >/dev/null ;;
+    esac
+fi
+""")
+        for name in ("ssh", "docker"):
+            (folder / "tools" / name).chmod(0o755)
+        test_env = dict(os.environ, PATH=f"{folder / 'tools'}:{os.environ['PATH']}",
+                        DEPLOY_EVENTS=str(events_file), DEPLOY_STATE=state,
+                        GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        def git(*args):
+            subprocess.run(["git", *args], cwd=folder, env=test_env, check=True,
+                           capture_output=True)
+        git("init")
+        git("config", "status.showUntrackedFiles", "no")
+        git("add", ".")
+        git("-c", "user.name=Workflow Test", "-c", "user.email=workflow@example.test",
+            "-c", "commit.gpgsign=false", "commit", "-m", "fixture")
+        if state in ("unstaged", "staged"):
+            (folder / "tracked").write_text("changed\n")
+            if state == "staged":
+                git("add", "tracked")
+        elif state == "untracked":
+            (folder / "untracked").write_text("new\n")
+        result = subprocess.run(["make", "deploy"], cwd=folder, env=test_env,
+                                capture_output=True, text=True, timeout=15)
+        events = events_file.read_text().splitlines() if events_file.exists() else []
+        if state == "clean":
+            assert events == ["ssh"], events
+            assert "uncommitted changes" not in result.stderr
+        else:
+            assert result.returncode != 0, state
+            expected_error = "HEAD changed during build" if state == "head-changed-during-build" else "uncommitted changes"
+            assert expected_error in result.stderr, result.stderr
+            assert events == (["ssh", "docker:build"] if state.endswith("during-build") else []), events
+
+# Exercise application-only updates and failure handling without production access.
 remote_program = (root / "deploy/deploy.sh").read_text().split("<<'REMOTE'\n", 1)[1].split("\nREMOTE\n", 1)[0]
-with tempfile.TemporaryDirectory() as directory:
-    folder = Path(directory)
-    (folder / "tools").mkdir()
-    docker_stub = folder / "tools/docker"
-    docker_stub.write_text("#!/bin/sh\nexit 0\n")
-    docker_stub.chmod(0o755)
-    test_env = dict(os.environ, PATH=f"{folder / 'tools'}:{os.environ['PATH']}")
-    def configure(image, port):
-        subprocess.run(
-            ["bash", "-s", "--", str(folder), image, "my-sub2api", str(port), "127.0.0.1"],
-            input=remote_program, env=test_env, check=True, capture_output=True, text=True,
+original = """services:
+  sub2api:
+    image: sub2api:old
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+  postgres:
+    image: postgres:18-alpine
+  redis:
+    image: redis:8-alpine
+"""
+stub = r'''#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+args = sys.argv[1:]
+events_path = Path(os.environ["DEPLOY_EVENTS"])
+with events_path.open("a") as stream:
+    stream.write(json.dumps(args) + "\n")
+events = [json.loads(line) for line in events_path.read_text().splitlines()]
+updated = any(a[0] == "compose" and "up" in a for a in events)
+stage = os.environ.get("DEPLOY_FAIL", "")
+if args[0] == "inspect":
+    if "--format" in args:
+        if "Labels" in args[args.index("--format") + 1]:
+            print("wrong-project" if stage == "project" else "sub2api-deploy")
+        else:
+            print("sha256:new" if updated and stage != "wrong-image" else "sha256:old")
+    else:
+        print("[]")
+elif args[0] == "image":
+    if stage == "image":
+        sys.exit(1)
+    if "--format" in args:
+        print("sha256:new")
+elif args[0] == "compose":
+    if "ps" in args:
+        service = args[-1]
+        if stage != "missing-" + service:
+            print(service + "-fixture")
+    elif "config" in args and stage == "validation":
+        sys.exit(1)
+    elif "up" in args:
+        # Catch bash -s commands accidentally consuming the remaining script.
+        sys.stdin.buffer.read()
+        if stage == "startup":
+            sys.exit(1)
+elif args[0] == "exec":
+    if "wget" in args:
+        if stage == "health":
+            sys.exit(1)
+        print('{"status":"ok"}')
+    elif "-version" in args and stage == "version":
+        sys.exit(1)
+'''
+failures = ("", "project", "image", "missing-postgres", "missing-redis", "validation",
+            "startup", "health", "version", "wrong-image")
+for failure in failures:
+    with tempfile.TemporaryDirectory() as directory:
+        folder = Path(directory)
+        (folder / "tools").mkdir()
+        (folder / "data").mkdir()
+        (folder / "data/config.yaml").write_text("jwt: retained\n")
+        credentials = b"POSTGRES_PASSWORD=keep-me\nJWT_SECRET=keep-this-too\n"
+        (folder / ".env").write_bytes(credentials)
+        (folder / "docker-compose.yml").write_text(original)
+        docker_stub = folder / "tools/docker"
+        docker_stub.write_text(stub)
+        docker_stub.chmod(0o755)
+        events_file = folder / "events"
+        test_env = dict(os.environ, PATH=f"{folder / 'tools'}:{os.environ['PATH']}",
+                        DEPLOY_EVENTS=str(events_file), DEPLOY_FAIL=failure)
+        result = subprocess.run(
+            ["bash", "-s", "--", str(folder), "sub2api:new", "sub2api-deploy", "sub2api"],
+            input=remote_program, env=test_env, capture_output=True, text=True, timeout=15,
         )
-        return dict(line.split("=", 1) for line in (folder / ".env").read_text().splitlines())
-    first = configure("my-sub2api:first", 8083)
-    assert (folder / ".env").stat().st_mode & 0o777 == 0o600
-    assert first["BIND_HOST"] == "127.0.0.1" and first["SERVER_PORT"] == "8083"
-    second = configure("my-sub2api:second", 8084)
-    assert second.pop("SERVER_PORT") == "8084"
-    first.pop("SERVER_PORT")
-    assert first == second, "update replaced server credentials"
-    override = (folder / "docker-compose.override.yml").read_text()
-    assert "image: my-sub2api:second" in override and "container_name: my-sub2api-postgres" in override
-    shutil.copy(root / "deploy/docker-compose.local.yml", folder / "docker-compose.yml")
-    result = subprocess.run(
-        [docker_executable, "compose", "-p", "my-sub2api", "--env-file", ".env",
-         "-f", "docker-compose.yml", "-f", "docker-compose.override.yml", "config", "--format", "json"],
-        cwd=folder, check=True, capture_output=True, text=True,
-    )
-    deployed = json.loads(result.stdout)["services"]
-    assert deployed["sub2api"]["image"] == "my-sub2api:second"
-    assert deployed["sub2api"]["container_name"] == "my-sub2api"
-    assert deployed["sub2api"]["ports"][0]["host_ip"] == "127.0.0.1"
-    assert str(deployed["sub2api"]["ports"admin/bug-fix][0]["published"]) == "8084"
-    for name in ("postgres", "redis"):
-        assert deployed[name]["container_name"] == f"my-sub2api-{name}"
-        assert not deployed[name].get("ports")
-        assert deployed[name]["volumes"][0]["source"].startswith(str(folder) + "/")
+        assert (result.returncode == 0) == (failure == ""), (failure, result.stderr)
+        assert (folder / ".env").read_bytes() == credentials
+        assert (folder / "data/config.yaml").read_text() == "jwt: retained\n"
+        assert not (folder / "docker-compose.deploy-pending.yml").exists()
+        events = [json.loads(line) for line in events_file.read_text().splitlines()]
+        assert not any(a[0] in ("stop", "start", "run") or "--migrate" in a
+                       or any("pg_dump" in x or "pg_restore" in x for x in a) for a in events), events
+        assert not any(a[0] == "compose" and "run" in a for a in events), events
+        ups = [a for a in events if a[0] == "compose" and "up" in a]
+        updated = failure in ("", "startup", "health", "version", "wrong-image")
+        assert len(ups) == int(updated), events
+        expected = original.replace("sub2api:old", "sub2api:new") if updated else original
+        assert (folder / "docker-compose.yml").read_text() == expected
+        if updated:
+            up = ups[0]
+            assert "--no-deps" in up and "--wait" in up and up[-1] == "sub2api"
+            assert up[up.index("--pull") + 1] == "never"
+            records = list((folder / "backups").iterdir())
+            assert len(records) == 1
+            record = records[0]
+            assert record.stat().st_mode & 0o777 == 0o700
+            assert (record / "docker-compose.yml").read_text() == original
+            assert (record / "container.json").stat().st_mode & 0o777 == 0o600
+            assert not (record / "database.dump").exists()
+            assert not (record / "files.tar.gz").exists()
+        if failure == "":
+            assert any("wget" in a for a in events), events
+            assert any("-version" in a for a in events), events
+            assert "Deployment complete" in result.stdout
+        else:
+            assert "Deployment complete" not in result.stdout
 
 print("make workflow test passed")
 PY

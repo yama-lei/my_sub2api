@@ -9,6 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCoderOpenAIWSClientDialer_PublicHostsOnlyRejectsUnexpectedDefaultTransport(t *testing.T) {
+	original := http.DefaultTransport
+	http.DefaultTransport = nil
+	t.Cleanup(func() { http.DefaultTransport = original })
+
+	_, _, _, err := newDefaultOpenAIWSClientDialer().Dial(
+		WithHTTPUpstreamPublicHostsOnly(t.Context()), "wss://8.8.8.8/v1/responses", nil, "",
+	)
+	require.ErrorContains(t, err, "unexpected default transport type")
+}
+
 func TestCoderOpenAIWSClientDialer_ProxyHTTPClientReuse(t *testing.T) {
 	dialer := newDefaultOpenAIWSClientDialer()
 	impl, ok := dialer.(*coderOpenAIWSClientDialer)

@@ -14,15 +14,44 @@ database password, fixed JWT/TOTP keys and optional admin credentials. Then use
 the original development stack with a local override. The override uses named
 volumes for NTFS compatibility and Linux host networking during image builds.
 
-Before `make deploy`, edit `SSH_HOST`, `SSH_PORT`, `APP_PORT`, `BIND_HOST`,
-`REMOTE_DIR`, `PROJECT_NAME` and `LOCAL_IMAGE` at the top of `deploy/deploy.sh`.
-It transfers the already built image over SSH and runs the original server
-Compose with independent container names. Defaults are `gcp`, port 8083 and
-`~/my-sub2api`; the app binds to the server's loopback interface. First-use
-server credentials are generated separately and saved in `~/my-sub2api/.env`.
-Later deployments preserve credentials and data. The image architecture must
-match the server. Access the default deployment through
-`ssh -N -L 8083:127.0.0.1:8083 gcp`, then open `http://localhost:8083`.
+Run `make deploy` to build the committed source for Linux amd64 and update
+the existing GCP service over SSH alias `gcp`. It uses Compose project
+`sub2api-deploy` in `/home/rayama114514/op-for-machne/sub2api-deploy`, through
+`sudo -n -u rayama114514`. No local `deploy/.env` or prior build is required.
+The existing port (8080), server credentials, configuration and data are retained.
+
+The initial migration is complete: the new application uses the existing
+PostgreSQL, Redis and `data/` mount. The legacy application container was removed;
+its image and the initial full backup are retained, but are not startup entries.
+The active server Compose file points to the new image. All three containers use
+`restart: unless-stopped`.
+
+For subsequent updates, commit your changes and run `make deploy` from the
+repository root. Staged, unstaged or untracked changes cause an immediate failure
+before SSH or Docker runs. The worktree and commit are checked again after the
+build, before upload. The sidebar version badge displays the deployed build's
+12-character Git commit hash for both users and admins.
+
+The command builds the committed source, uploads the image, validates
+the existing server Compose configuration, changes only the application image,
+and runs `docker compose up -d --no-deps --pull never --wait ... sub2api`.
+PostgreSQL and Redis are neither recreated nor restarted. There is no separate
+`--migrate` invocation, data import, full database dump or `data/` archive during
+routine updates. Startup automatically applies only pending SQL migrations.
+There is a brief interruption while the application container is replaced;
+concurrent replacements are rejected with a file lock.
+
+Each update retains the previous Compose file, container metadata and an
+`image.txt` identifying the previous image under `backups/update-*/`. These are
+**deployment records, not database backups**. Take a separate database backup
+before upgrades that change schema or data. The initial full backup under
+`backups/deploy-*/` is not a substitute for up-to-date backups.
+
+Validation failures leave the running application untouched. Startup or health
+check failures make `make deploy` fail rather than report success. Inspect with
+`ssh gcp 'docker logs --tail 100 sub2api'`; do not blindly start an older image or
+restore the database, since startup may already have applied schema changes.
+The updated image remains in the active Compose file for subsequent operations.
 
 ## Deployment Methods
 

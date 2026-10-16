@@ -172,6 +172,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		WithGroup(func(q *dbent.GroupQuery) {
 			q.Select(
 				group.FieldID,
+				group.FieldOwnerUserID,
+				group.FieldSupplierRate,
 				group.FieldName,
 				group.FieldPlatform,
 				group.FieldIsExclusive,

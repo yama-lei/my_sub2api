@@ -12,7 +12,7 @@ func (r *relayRepository) settlePendingEarnings(ctx context.Context, supplierID 
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `SELECT e.id,e.consumer_user_id FROM relay_earnings e
 		JOIN users u ON u.id=e.consumer_user_id
 		WHERE e.supplier_user_id=$1 AND e.credited_at IS NULL AND u.balance>=0
@@ -26,14 +26,14 @@ func (r *relayRepository) settlePendingEarnings(ctx context.Context, supplierID 
 	for rows.Next() {
 		var v pending
 		if err = rows.Scan(&v.id, &v.buyer); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return false, err
 		}
 		entries = append(entries, v)
 		userIDs = append(userIDs, v.buyer)
 	}
 	err = rows.Err()
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return false, err
 	}
@@ -49,13 +49,13 @@ func (r *relayRepository) settlePendingEarnings(ctx context.Context, supplierID 
 		var id int64
 		var balance float64
 		if err = rows.Scan(&id, &balance); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return false, err
 		}
 		balances[id] = balance
 	}
 	err = rows.Err()
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return false, err
 	}
