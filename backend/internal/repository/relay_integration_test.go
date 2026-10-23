@@ -10,6 +10,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +20,23 @@ func relayFixture(t *testing.T) (consumer, supplier *service.User, public, priva
 	client := testEntClient(t)
 	consumer = mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@relay.test", PasswordHash: "hash", Balance: 100})
 	supplier = mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@relay.test", PasswordHash: "hash", Balance: 0})
+	t.Cleanup(func() {
+		// These tests commit transactions, so remove dependent rows before their owners.
+		for _, query := range []string{
+			"DELETE FROM relay_earnings WHERE consumer_user_id=ANY($1) OR supplier_user_id=ANY($1)",
+			"DELETE FROM batch_image_jobs WHERE user_id=ANY($1) OR supplier_user_id=ANY($1)",
+			"DELETE FROM accounts WHERE owner_user_id=ANY($1)",
+			"DELETE FROM groups WHERE owner_user_id=ANY($1)",
+			"DELETE FROM users WHERE id=ANY($1)",
+		} {
+			_, err := integrationDB.ExecContext(ctx, query, pq.Array([]int64{consumer.ID, supplier.ID}))
+			require.NoError(t, err, "clean relay fixture: %s", query)
+		}
+		if public != nil {
+			_, err := integrationDB.ExecContext(ctx, "DELETE FROM groups WHERE id=$1", public.ID)
+			require.NoError(t, err, "clean public relay group")
+		}
+	})
 	groupRepo := NewGroupRepository(client, integrationDB)
 	public = &service.Group{Name: "public-" + uuid.NewString(), Platform: service.PlatformOpenAI, Status: service.StatusActive, SubscriptionType: service.SubscriptionTypeStandard, SupplierRate: 0.9, RateMultiplier: 1, SupportedModelScopes: []string{}}
 	require.NoError(t, groupRepo.Create(ctx, public))
@@ -30,6 +48,34 @@ func relayFixture(t *testing.T) (consumer, supplier *service.User, public, priva
 	require.NoError(t, accountRepo.BindGroups(ctx, account.ID, []int64{public.ID, private.ID}))
 	key = mustCreateApiKey(t, client, &service.APIKey{UserID: consumer.ID, Key: "sk-" + uuid.NewString(), Name: "relay", GroupID: &public.ID})
 	return
+}
+
+func TestRelayFixtureCleanup(t *testing.T) {
+	var userIDs []int64
+	var publicID int64
+	require.True(t, t.Run("fixture", func(t *testing.T) {
+		consumer, supplier, public, _, account, key := relayFixture(t)
+		userIDs = []int64{consumer.ID, supplier.ID}
+		publicID = public.ID
+		_, err := NewUsageBillingRepository(testEntClient(t), integrationDB).Apply(t.Context(), &service.UsageBillingCommand{
+			RequestID: uuid.NewString(), APIKeyID: key.ID, UserID: consumer.ID, AccountID: account.ID,
+			GroupID: &public.ID, SupplierUserID: &supplier.ID, SupplierRate: 0.9, BalanceCost: 1,
+		})
+		require.NoError(t, err)
+	}))
+	for _, query := range []string{
+		"SELECT COUNT(*) FROM relay_earnings WHERE consumer_user_id=ANY($1) OR supplier_user_id=ANY($1)",
+		"SELECT COUNT(*) FROM users WHERE id=ANY($1)",
+		"SELECT COUNT(*) FROM accounts WHERE owner_user_id=ANY($1)",
+		"SELECT COUNT(*) FROM groups WHERE owner_user_id=ANY($1)",
+	} {
+		var count int
+		require.NoError(t, integrationDB.QueryRow(query, pq.Array(userIDs)).Scan(&count))
+		require.Zero(t, count, query)
+	}
+	var count int
+	require.NoError(t, integrationDB.QueryRow("SELECT COUNT(*) FROM groups WHERE id=$1", publicID).Scan(&count))
+	require.Zero(t, count, "public fixture group must also be removed")
 }
 
 func TestRelaySettlementCreditsSupplierExactlyOnce(t *testing.T) {

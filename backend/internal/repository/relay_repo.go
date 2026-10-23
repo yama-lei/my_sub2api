@@ -60,7 +60,7 @@ func (r *relayRepository) Earnings(ctx context.Context, userID int64, page, size
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var v service.RelayEarning
 		if err = rows.Scan(&v.ID, &v.AccountID, &v.GroupID, &v.RequestID, &v.ChargedAmount, &v.SupplierRate, &v.Amount, &v.SelfUse, &v.CreatedAt, &v.CreditedAt); err != nil {

@@ -37,6 +37,7 @@ func RegisterUserRoutes(
 			relay.PUT("/accounts/:id", h.Relay.UpdateAccount)
 			relay.DELETE("/accounts/:id", h.Relay.DeleteAccount)
 			relay.GET("/earnings", panelRateLimiter.Heavy(), h.Relay.Earnings)
+			relay.GET("/group-status", panelRateLimiter.Heavy(), h.Relay.GroupStatus)
 		}
 		// 用户接口
 		user := authenticated.Group("/user")
