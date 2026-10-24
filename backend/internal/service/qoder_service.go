@@ -91,7 +91,7 @@ func (s *QoderService) client(ctx context.Context, proxyID *int64) (*qoder.Clien
 	proxyURL := ""
 	if proxyID != nil {
 		if s.proxyRepo == nil {
-			return nil, errors.New("Qoder 代理服务未配置")
+			return nil, errors.New("未配置 Qoder 代理服务")
 		}
 		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
 		if err != nil {
@@ -300,7 +300,7 @@ func (s *QoderService) Commit(ctx context.Context, owner int64, id string, creat
 		}
 		repo, ok := s.accountRepo.(QoderReauthorizationRepository)
 		if !ok {
-			return QoderLoginSummary{}, errors.New("Qoder 凭证条件更新服务未配置")
+			return QoderLoginSummary{}, errors.New("未配置 Qoder 凭证条件更新服务")
 		}
 		applied, saveErr := repo.ReauthorizeQoderOAuthCredentialsIfUnchanged(ctx, account.ID, account.Credentials, account.ProxyID, replacement)
 		if saveErr != nil {
@@ -355,7 +355,7 @@ func (s *QoderService) CurrentAccount(ctx context.Context, account *Account, for
 			return nil, err
 		}
 		if fresh == nil || !fresh.IsQoder() {
-			return nil, errors.New("Qoder 账号状态已变化")
+			return nil, errors.New("账号状态已变化（Qoder）")
 		}
 	}
 	if err := checkQoderRelayAccess(ctx, fresh); err != nil {
@@ -364,7 +364,7 @@ func (s *QoderService) CurrentAccount(ctx context.Context, account *Account, for
 	credentials := qoder.CredentialsFromMap(fresh.Credentials)
 	if force || (!credentials.Expiry().IsZero() && time.Until(credentials.Expiry()) < time.Hour) {
 		if s.refreshAPI == nil {
-			return nil, errors.New("Qoder 续期服务未配置")
+			return nil, errors.New("未配置 Qoder 续期服务")
 		}
 		window := time.Hour
 		if force {
@@ -386,13 +386,13 @@ func (s *QoderService) CurrentAccount(ctx context.Context, account *Account, for
 		}
 	}
 	if fresh == nil || !fresh.IsQoder() {
-		return nil, errors.New("Qoder 账号状态已变化")
+		return nil, errors.New("账号状态已变化（Qoder）")
 	}
 	if err := checkQoderRelayAccess(ctx, fresh); err != nil {
 		return nil, err
 	}
 	if fresh.GetCredential("access_token") == "" {
-		return nil, errors.New("Qoder 账号缺少访问令牌")
+		return nil, errors.New("账号缺少访问令牌（Qoder）")
 	}
 	return fresh, nil
 }
@@ -451,7 +451,7 @@ func (r *QoderTokenRefresher) NeedsRefresh(account *Account, window time.Duratio
 }
 func (r *QoderTokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
 	if r.service == nil {
-		return nil, errors.New("Qoder 续期服务未配置")
+		return nil, errors.New("未配置 Qoder 续期服务")
 	}
 	client, err := r.service.client(ctx, account.ProxyID)
 	if err != nil {

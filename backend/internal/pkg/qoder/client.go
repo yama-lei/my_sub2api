@@ -153,7 +153,11 @@ type Client struct {
 }
 
 func NewClient(proxyURL string) (*Client, error) {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("unexpected default HTTP transport type")
+	}
+	transport := defaultTransport.Clone()
 	transport.ResponseHeaderTimeout = 120 * time.Second
 	if proxyURL != "" {
 		u, err := url.Parse(proxyURL)
@@ -190,7 +194,7 @@ func (c *Client) jsonCall(ctx context.Context, path string, body any, token stri
 	if err != nil {
 		return &Error{502, "Qoder 业务接口连接失败"}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == 404 && strings.HasPrefix(path, "/api/v1/deviceToken/poll") {
 		return ErrPending
 	}
@@ -299,9 +303,9 @@ func Encode(data []byte) string {
 	var out strings.Builder
 	for _, ch := range encoded {
 		if ch == '=' {
-			out.WriteByte('$')
+			_ = out.WriteByte('$')
 		} else {
-			out.WriteByte(customAlphabet[strings.IndexRune(standard, ch)])
+			_ = out.WriteByte(customAlphabet[strings.IndexRune(standard, ch)])
 		}
 	}
 	return out.String()
@@ -320,7 +324,12 @@ func SignHeaders(credentials Credentials, path, body string) (http.Header, error
 	if err != nil {
 		return nil, err
 	}
-	wrapped, err := rsa.EncryptPKCS1v15(rand.Reader, parsed.(*rsa.PublicKey), key)
+	rsaKey, ok := parsed.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("invalid Qoder public key type")
+	}
+	// Qoder 上游客户端协议固定使用 PKCS#1 v1.5 加密设备密钥，无法切换到 OAEP。
+	wrapped, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, key) //nolint:staticcheck // SA1019: 协议由 Qoder 服务端规定
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +375,7 @@ func (c *Client) Models(ctx context.Context, credentials Credentials) ([]Model, 
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != 200 {
 		return nil, &Error{response.StatusCode, fmt.Sprintf("模型目录返回 HTTP %d", response.StatusCode)}
 	}
@@ -586,7 +595,7 @@ func (c *Client) ChatStream(ctx context.Context, credentials Credentials, body m
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != 200 {
 		if response.StatusCode == http.StatusTooManyRequests {
 			return &RateLimitError{Message: "Qoder 请求受限，请稍后重试", RetryAfter: retryAfter(response.Header.Get("Retry-After"))}

@@ -736,7 +736,7 @@ func normalizeModelRegistryBaseURL(raw string) string {
 func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account *Account) ([]string, []byte, error) {
 	if account != nil && account.IsQoder() {
 		if s.qoderService == nil {
-			return nil, nil, newUpstreamModelSyncConfigError("Qoder 模型服务未配置", nil)
+			return nil, nil, newUpstreamModelSyncConfigError("未配置 Qoder 模型服务", nil)
 		}
 		models, err := s.qoderService.Models(ctx, account)
 		if err != nil {

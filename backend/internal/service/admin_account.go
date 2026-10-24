@@ -417,7 +417,7 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 
 func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]any) (*Account, error) {
 	if input.Platform == PlatformQoder && input.Type != AccountTypeOAuth {
-		return nil, errors.New("Qoder 账号仅支持 OAuth 授权")
+		return nil, errors.New("请使用 OAuth 方式授权 Qoder 账号")
 	}
 	if input.Platform == PlatformTypeSafe && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
@@ -609,7 +609,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 	if account.Platform == PlatformQoder && input.Type != "" && input.Type != AccountTypeOAuth {
-		return nil, errors.New("Qoder 账号仅支持 OAuth 授权")
+		return nil, errors.New("请使用 OAuth 方式授权 Qoder 账号")
 	}
 	if account.Platform == PlatformTypeSafe && input.Type != "" && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")

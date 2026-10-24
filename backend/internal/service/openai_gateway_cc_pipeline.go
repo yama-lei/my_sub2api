@@ -200,7 +200,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 ) (*http.Response, error) {
 	if account.IsQoder() {
 		if s.qoderService == nil {
-			return nil, errors.New("Qoder 转发服务未配置")
+			return nil, errors.New("未配置 Qoder 转发服务")
 		}
 		return s.qoderService.Forward(ctx, account, body, stream)
 	}

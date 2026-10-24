@@ -30,7 +30,7 @@ func TestQoderForwardQueueReturns429BeforeStreamStarts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var body map[string]map[string]any
 			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 				t.Fatal(err)

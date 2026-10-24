@@ -169,6 +169,10 @@ func (s *QoderService) AccountCredits(ctx context.Context, account *Account, for
 		if result.Err != nil {
 			return creditsAccount(account, qoderCreditsCache{err: "账号授权或状态已更新，请重新查询额度。"}), nil
 		}
-		return result.Val.(QoderCreditsAccount), nil
+		cached, ok := result.Val.(QoderCreditsAccount)
+		if !ok {
+			return creditsAccount(account, qoderCreditsCache{err: "额度缓存数据格式异常，请重新查询。"}), nil
+		}
+		return cached, nil
 	}
 }

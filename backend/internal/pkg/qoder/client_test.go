@@ -88,12 +88,34 @@ func TestQoderToolArgumentsMergeAcrossInterleavedIndices(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := collector.Completion("qwen3.8-flash")
-	message := result["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)
-	calls := message["tool_calls"].([]any)
+	choices, ok := result["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		t.Fatalf("unexpected choices payload: %T", result["choices"])
+	}
+	firstChoice, ok := choices[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected choice payload: %T", choices[0])
+	}
+	message, ok := firstChoice["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected message payload: %T", firstChoice["message"])
+	}
+	calls, ok := message["tool_calls"].([]any)
+	if !ok {
+		t.Fatalf("unexpected tool_calls payload: %T", message["tool_calls"])
+	}
 	if len(calls) != 2 {
 		t.Fatal("非连续索引的工具调用被丢弃")
 	}
-	if calls[0].(map[string]any)["function"].(map[string]any)["arguments"] != `{"city":"南京"}` {
+	firstCall, ok := calls[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected call payload: %T", calls[0])
+	}
+	firstFunction, ok := firstCall["function"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected function payload: %T", firstCall["function"])
+	}
+	if firstFunction["arguments"] != `{"city":"南京"}` {
 		t.Fatal("分段参数合并错误")
 	}
 	if (ToolConstraint{Single: true}).Validate(collector) == nil {
@@ -117,7 +139,15 @@ func TestQoderNonePreservesToolHistoryAndRejectsNewCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(body["tools"].([]any)) != 1 || len(body["messages"].([]any)) != 3 {
+	tools, ok := body["tools"].([]any)
+	if !ok {
+		t.Fatalf("unexpected tools payload: %T", body["tools"])
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok {
+		t.Fatalf("unexpected messages payload: %T", body["messages"])
+	}
+	if len(tools) != 1 || len(messages) != 3 {
 		t.Fatal("工具结果历史或对应定义被丢弃")
 	}
 	if !constraint.Buffered || constraint.Validate(&Collector{Content: "23 摄氏度"}) != nil {
@@ -135,12 +165,26 @@ func TestQoderToolHistoryHasExplicitEmptyContent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		messages := body["messages"].([]any)
-		assistant := messages[0].(map[string]any)
-		if assistant["content"] != "" || assistant["reasoning_content"] != "已有推理" || len(assistant["tool_calls"].([]any)) != 1 {
+		messages, ok := body["messages"].([]any)
+		if !ok || len(messages) < 2 {
+			t.Fatalf("unexpected messages payload: %T", body["messages"])
+		}
+		assistant, ok := messages[0].(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected assistant payload: %T", messages[0])
+		}
+		toolCalls, ok := assistant["tool_calls"].([]any)
+		if !ok {
+			t.Fatalf("unexpected tool_calls payload: %T", assistant["tool_calls"])
+		}
+		if assistant["content"] != "" || assistant["reasoning_content"] != "已有推理" || len(toolCalls) != 1 {
 			t.Fatal("工具消息正文归一化丢失了推理或调用信息")
 		}
-		if messages[1].(map[string]any)["content"] != "23 摄氏度" {
+		toolResult, ok := messages[1].(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected tool result payload: %T", messages[1])
+		}
+		if toolResult["content"] != "23 摄氏度" {
 			t.Fatal("工具结果被改写")
 		}
 	}

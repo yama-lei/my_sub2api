@@ -12,7 +12,7 @@ func (s *AccountUsageService) SetQoderService(qoder *QoderService) {
 // Both individual and batch usage queries use the same Credits cache and refresh policy.
 func (s *AccountUsageService) getQoderUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {
 	if s.qoderService == nil {
-		return nil, errors.New("Qoder 用量服务未配置")
+		return nil, errors.New("未配置 Qoder 用量服务")
 	}
 	row, err := s.qoderService.AccountCredits(ctx, account, force)
 	if err != nil {

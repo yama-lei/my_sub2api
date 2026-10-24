@@ -68,8 +68,15 @@ func ApplyToolConstraint(body map[string]any) (ToolConstraint, error) {
 	case "function":
 		selected := make([]any, 0, 1)
 		for _, tool := range tools {
-			entry := tool.(map[string]any)
-			if entry["function"].(map[string]any)["name"] == c.Function {
+			entry, ok := tool.(map[string]any)
+			if !ok {
+				continue
+			}
+			function, ok := entry["function"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if function["name"] == c.Function {
 				selected = append(selected, tool)
 			}
 		}
@@ -88,8 +95,15 @@ func ApplyToolConstraint(body map[string]any) (ToolConstraint, error) {
 	if c.Buffered {
 		var systems []string
 		remaining := make([]any, 0)
-		for _, message := range body["messages"].([]any) {
-			entry := message.(map[string]any)
+		messages, ok := body["messages"].([]any)
+		if !ok {
+			return c, &Error{400, "工具约束需要标准 messages 数组"}
+		}
+		for _, message := range messages {
+			entry, ok := message.(map[string]any)
+			if !ok {
+				continue
+			}
 			if entry["role"] == "system" {
 				text, ok := entry["content"].(string)
 				if !ok {

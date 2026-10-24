@@ -96,7 +96,7 @@ func (s *QoderService) Forward(ctx context.Context, account *Account, raw []byte
 			}
 			return nil
 		}
-		return errors.New("Qoder 授权失效，请重新授权")
+		return errors.New("授权已失效，请重新授权（Qoder）")
 	}
 	if !stream {
 		if err := run(ctx, func(map[string]any) error { return nil }); err != nil {
@@ -154,7 +154,7 @@ func qoderHTTPError(err error) *http.Response {
 	if errors.As(err, &provider) && provider.Status >= 400 && provider.Status <= 599 {
 		status = provider.Status
 	}
-	message := "Qoder 请求失败"
+	message := "请求失败（Qoder）"
 	if provider != nil {
 		message = provider.Message
 	}

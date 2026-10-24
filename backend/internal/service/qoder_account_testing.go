@@ -32,7 +32,7 @@ func (s *AccountTestService) testQoderAccount(c *gin.Context, account *Account, 
 	if err != nil {
 		return s.sendErrorAndEnd(c, err.Error())
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != 200 {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Qoder 接口返回 HTTP %d", response.StatusCode))
 	}

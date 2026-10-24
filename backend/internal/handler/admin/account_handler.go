@@ -1406,7 +1406,7 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
 	if account.IsQoder() {
 		if h.qoderService == nil {
-			return nil, "", fmt.Errorf("Qoder 续期服务未配置")
+			return nil, "", fmt.Errorf("未配置 Qoder 续期服务")
 		}
 		fresh, err := h.qoderService.CurrentAccount(ctx, account, true)
 		return fresh, "", err

@@ -1211,7 +1211,7 @@ func hashSensitiveValueForLog(raw string) string {
 func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (string, string, error) {
 	if account.IsQoder() {
 		if s.qoderService == nil {
-			return "", "", errors.New("Qoder 令牌服务未配置")
+			return "", "", errors.New("未配置 Qoder 令牌服务")
 		}
 		fresh, err := s.qoderService.CurrentAccount(ctx, account, false)
 		if err != nil {
