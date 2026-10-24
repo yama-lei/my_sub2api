@@ -349,3 +349,15 @@ func (h *RelayHandler) Earnings(c *gin.Context) {
 	}
 	response.Success(c, out)
 }
+
+func (h *RelayHandler) GroupStatus(c *gin.Context) {
+	userID, ok := relayUser(c)
+	if !ok {
+		return
+	}
+	out, err := h.relay.GroupStatus(c.Request.Context(), userID)
+	if response.ErrorFrom(c, err) {
+		return
+	}
+	response.Success(c, gin.H{"groups": out})
+}

@@ -210,6 +210,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, title: 'My relay', titleKey: 'relay.title' }
   },
   {
+    path: '/relay-groups',
+    name: 'RelayGroupStatus',
+    component: () => import('@/views/user/RelayGroupStatusView.vue'),
+    meta: { requiresAuth: true, title: 'Group status', titleKey: 'relay.status.title' }
+  },
+  {
     path: '/keys',
     name: 'Keys',
     component: () => import('@/views/user/KeysView.vue'),

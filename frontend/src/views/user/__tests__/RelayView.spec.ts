@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
   deleteGroup: vi.fn(), deleteAccount: vi.fn(), showError: vi.fn(), showSuccess: vi.fn()
 }))
 vi.mock('@/api/relay', () => ({ relayApi: api }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: api.showError, showSuccess: api.showSuccess }) }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: api.showError, showSuccess: api.showSuccess, fetchPublicSettings: () => Promise.resolve(null) }) }))
 vi.mock('vue-i18n', async (importOriginal) => ({ ...await importOriginal<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 
 const privateGroup = { id: 1, name: 'u7: My relay', platform: 'composite', owner_user_id: 7, status: 'active' }
@@ -35,7 +35,8 @@ function mountView() {
       setup: () => ({ scope: inject(accountWorkspaceKey)?.basePath }),
       template: '<div data-testid="relay-usage-cell" :data-scope="scope" />'
     }),
-    ConfirmDialog: true, RouterLink: { template: '<a><slot /></a>' }
+    ConfirmDialog: true, EmptyState: { props: ['title'], template: '<div>{{ title }}</div>' }, PlatformIcon: true, Icon: true,
+    RouterLink: { template: '<a><slot /></a>' }
   } } })
   return wrapper
 }
@@ -78,29 +79,32 @@ describe('My relay shared account flows', () => {
 
   it('uses the Admin creation component, with a user scope and only a private default group', async () => {
     const view = mountView(); await flushPromises()
-    await click(view, 'relay.addAccount')
+    await click(view, 'relay.accounts.add')
     const form = view.findComponent({ name: 'CreateAccountModal' })
     expect(form.props('show')).toBe(true)
     expect(form.props('initialGroupIds')).toEqual([1])
-    expect(form.props('groups')).toEqual([privateGroup, publicGroup])
+    expect(form.props('groups')).toEqual([
+      { ...privateGroup, name: 'relay.groupOption.private' },
+      { ...publicGroup, name: 'relay.groupOption.shared' }
+    ])
     expect(form.props('proxies')).toEqual([])
     expect(view.get('[data-scope]').attributes('data-scope')).toBe('/relay')
   })
 
   it('reuses editing and reauthorization without switching to an Admin scope', async () => {
     const view = mountView(); await flushPromises()
-    await view.findAll('button').filter(button => button.text() === 'common.edit')[1].trigger('click')
+    await view.findAll('button').filter(button => button.text() === 'common.edit')[0].trigger('click')
     expect(view.findComponent({ name: 'EditAccountModal' }).props('account')).toEqual(account)
-    await click(view, 'admin.accounts.reAuthorizeAccount')
+    await click(view, 'relay.accounts.reauth')
     expect(view.findComponent({ name: 'ReAuthAccountModal' }).props('account')).toEqual(account)
     expect(view.findAll('[data-scope]').every(node => node.attributes('data-scope') === '/relay')).toBe(true)
   })
 
   it('opens shared testing and statistics for the selected owned account', async () => {
     const view = mountView(); await flushPromises()
-    await click(view, 'admin.accounts.testConnection')
+    await click(view, 'relay.accounts.test')
     expect(view.findComponent({ name: 'AccountTestModal' }).props('account')).toEqual(account)
-    await click(view, 'admin.accounts.viewStats')
+    await click(view, 'relay.accounts.stats')
     expect(view.findComponent({ name: 'AccountStatsModal' }).props('account')).toEqual(account)
   })
 
@@ -108,8 +112,23 @@ describe('My relay shared account flows', () => {
     api.earnings.mockResolvedValue({ total: 1, total_earned: 0.9, today_earned: 0.9, pending_earned: 1,
       items: [{ id: 1, account_id: 3, group_id: 2, charged_amount: 1, amount: 0.9, supplier_rate: 0.9, self_use: true, created_at: '2026-10-09T00:00:00Z', credited_at: null }] })
     const view = mountView(); await flushPromises()
-    expect(view.text()).toContain('relay.selfUse')
-    expect(view.text()).toContain('relay.pendingNotice')
+    await view.findAll('[role="tab"]')[2].trigger('click')
+    expect(view.text()).toContain('relay.earnings.selfUse')
+    expect(view.text()).toContain('relay.earnings.pendingNotice')
+    expect(view.text()).toContain('My Codex')
     expect(view.text()).toContain('90%')
+  })
+  it('opens the setup guide until the first upstream is connected', async () => {
+    api.accounts.mockResolvedValue({ items: [], total: 0 })
+    const view = mountView(); await flushPromises()
+    expect(view.text()).toContain('relay.guide.step1Title')
+    expect(view.text()).toContain('relay.accounts.emptyTitle')
+  })
+
+  it('collapses the setup guide once an upstream exists', async () => {
+    const view = mountView(); await flushPromises()
+    expect(view.text()).not.toContain('relay.guide.step1Title')
+    await click(view, 'relay.guide.show')
+    expect(view.text()).toContain('relay.guide.step1Title')
   })
 })

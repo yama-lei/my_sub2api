@@ -22,6 +22,39 @@ export interface RelayEarnings {
   pending_earned: number
 }
 
+export type RelayAccountState =
+  | 'available' | 'rate_limited' | 'overloaded' | 'cooling' | 'quota_exceeded'
+  | 'expired' | 'paused' | 'error' | 'disabled'
+
+// Accounts owned by other users or the platform are anonymous: id, name and error details are omitted.
+export interface RelayAccountStatus {
+  mine: boolean
+  id?: number
+  name?: string
+  platform: string
+  type: string
+  state: RelayAccountState
+  until?: string
+  error_message?: string
+  reason?: string
+}
+
+export interface RelayGroupStatus {
+  id: number
+  name: string
+  description: string
+  platform: string
+  kind: 'private' | 'public_relay' | 'standard'
+  status: string
+  subscription_type: string
+  rate_multiplier: number
+  supplier_rate: number
+  total: number
+  available: number
+  mine: number
+  accounts: RelayAccountStatus[]
+}
+
 export interface RelayAccountInput {
   name: string
   platform: string
@@ -41,6 +74,9 @@ export const relayApi = {
   },
   async earnings(page = 1) {
     return (await apiClient.get<RelayEarnings>('/relay/earnings', { params: { page, page_size: 20 } })).data
+  },
+  async groupStatus() {
+    return (await apiClient.get<{ groups: RelayGroupStatus[] }>('/relay/group-status')).data.groups
   },
   async createAccount(input: RelayAccountInput) {
     return (await apiClient.post<Account>('/relay/accounts', input)).data
