@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageCell from '../AccountUsageCell.vue'
 import type { Account } from '@/types'
+import { adminAPI } from '@/api/admin'
+import { accountWorkspaceKey, type AccountWorkspace } from '@/composables/useAccountWorkspace'
 
 const { getUsage } = vi.hoisted(() => ({
   getUsage: vi.fn()
@@ -113,6 +116,51 @@ const cnUsageCellStubs = {
 }
 
 describe('AccountUsageCell', () => {
+  it.each(['openai', 'anthropic'] as const)('queries native %s usage and scopes quota controls to the relay workspace', async (platform) => {
+    const relayGetUsage = vi.fn().mockResolvedValue({
+      source: 'active', five_hour: { utilization: 25 }, seven_day: { utilization: 50 }
+    })
+    const workspace: AccountWorkspace = {
+      isRelay: true, basePath: '/relay',
+      api: { ...adminAPI, accounts: { ...adminAPI.accounts, getUsage: relayGetUsage } }
+    }
+    const nativeAccount = makeAccount({ id: platform === 'openai' ? 9101 : 9102, platform, type: 'oauth' })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: nativeAccount },
+      global: {
+        provide: { [accountWorkspaceKey as symbol]: workspace },
+        stubs: Object.fromEntries(['ClaudeResetCreditsCell', 'OpenAIQuotaResetCell'].map(name => [name, defineComponent({
+          name, props: ['account', 'basePath'], template: '<div><slot name="pre-actions" /></div>'
+        })]))
+      }
+    })
+    await flushPromises()
+    if (platform === 'anthropic') {
+      expect(relayGetUsage).toHaveBeenCalledWith(nativeAccount.id, 'passive', false)
+    } else {
+      expect(relayGetUsage).toHaveBeenCalledWith(nativeAccount.id)
+    }
+    expect(wrapper.text()).toContain('25%')
+    expect(wrapper.text()).toContain('50%')
+    const quotaControl = wrapper.findComponent({ name: platform === 'openai' ? 'OpenAIQuotaResetCell' : 'ClaudeResetCreditsCell' })
+    expect(quotaControl.props('basePath')).toBe('/relay')
+    await wrapper.get('[data-testid="account-usage-query"]').trigger('click')
+    await flushPromises()
+    expect(relayGetUsage).toHaveBeenLastCalledWith(nativeAccount.id, 'active', true)
+    expect(getUsage).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('renders native Qoder usage in the shared usage column', () => {
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ platform: 'qoder', type: 'oauth' }), manualRefreshToken: 7 },
+      global: { stubs: { QoderUsageCell: { name: 'QoderUsageCell', props: ['account', 'manualRefreshToken'], template: '<div data-test="qoder-usage" />' } } }
+    })
+    expect(wrapper.find('[data-test="qoder-usage"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'QoderUsageCell' }).props('manualRefreshToken')).toBe(7)
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     getUsage.mockReset()
     Object.defineProperty(window, 'matchMedia', {

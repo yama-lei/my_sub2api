@@ -14,7 +14,11 @@
             <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
           </button>
         </div>
-      </div>
+          <button class="btn btn-secondary" :disabled="loading" :title="t('relay.refresh')" @click="refresh">
+            <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+            <span class="sr-only">{{ t('relay.refresh') }}</span>
+          </button>
+        </div>
 
       <!-- Two ways to use an upstream: the core concept of this page -->
       <div class="grid gap-4 md:grid-cols-2">
@@ -133,13 +137,14 @@
               :description="t('relay.accounts.emptyDesc')"
             />
             <div v-else class="overflow-x-auto">
-              <table class="w-full text-left text-sm">
+              <table class="w-full text-left text-sm" data-testid="relay-accounts-table">
                 <thead class="text-xs uppercase text-gray-500 dark:text-gray-400">
                   <tr class="border-b border-gray-200 dark:border-dark-600">
                     <th class="p-3 font-medium">{{ t('relay.accounts.account') }}</th>
                     <th class="p-3 font-medium">{{ t('relay.accounts.usage') }}</th>
                     <th class="p-3 font-medium">{{ t('relay.accounts.status') }}</th>
-                    <th class="p-3 font-medium">{{ t('relay.accounts.actions') }}</th>
+                    <th class="p-3 font-medium">{{ t('admin.accounts.columns.usageWindows') }}</th>
+                    <th class="p-3 font-medium">{{ t('common.actions') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -163,6 +168,15 @@
                       <p v-if="!account.group_ids?.length" class="text-xs text-amber-600">{{ t('relay.accounts.notInGroup') }}</p>
                     </td>
                     <td class="p-3"><AccountStatusIndicator :account="account" /></td>
+                    <td class="p-3">
+                      <AccountUsageCell
+                        v-if="supportsUsageWindow(account)"
+                        :account="account"
+                        :manual-refresh-token="usageRefreshToken"
+                        @account-updated="handleAccountUpdated"
+                      />
+                      <span v-else class="text-xs text-gray-400 dark:text-gray-500">—</span>
+                    </td>
                     <td class="p-3">
                       <div class="flex flex-wrap gap-1.5">
                         <button class="btn btn-secondary btn-sm" @click="openAccount(account)">{{ t('common.edit') }}</button>
@@ -283,6 +297,7 @@
       </div>
     </div>
 
+
     <CreateAccountModal :show="showCreate" :proxies="[]" :groups="accountGroups" :initial-group-ids="privateGroups.slice(0, 1).map(group => group.id)" @close="showCreate = false" @created="load" />
     <EditAccountModal :show="showAccount" :account="editingAccount" :proxies="[]" :groups="accountGroups" @close="showAccount = false" @updated="load" />
     <ReAuthAccountModal :show="showReAuth" :account="actionAccount" @close="showReAuth = false" @reauthorized="load" />
@@ -340,6 +355,7 @@ import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vu
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
+import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import { accountWorkspaceKey } from '@/composables/useAccountWorkspace'
 import { relayAccountWorkspace } from '@/api/relayAccountWorkspace'
 
@@ -369,6 +385,7 @@ const showTest = ref(false)
 const showStats = ref(false)
 const actionAccount = ref<Account | null>(null)
 const refreshingID = ref<number | null>(null)
+const usageRefreshToken = ref(0)
 const showGroup = ref(false)
 const pendingDelete = ref<{ kind: 'account' | 'group'; id: number } | null>(null)
 const groupForm = reactive({ name: '', platform: 'composite', description: '', status: 'active' })
@@ -435,6 +452,10 @@ const Pager = defineComponent({
   }
 })
 
+const supportsUsageWindow = (account: Account) =>
+  (['qoder', 'openai', 'anthropic'].includes(account.platform) && account.type === 'oauth') ||
+  (account.platform === 'anthropic' && account.type === 'setup-token')
+
 async function load() {
   loading.value = true
   try {
@@ -447,6 +468,15 @@ async function load() {
     loaded.value = true
   } catch { app.showError(t('relay.loadFailed')) }
   finally { loading.value = false }
+}
+
+async function refresh() {
+  await load()
+  usageRefreshToken.value++
+}
+
+function handleAccountUpdated(updated: Account) {
+  accounts.value = accounts.value.map(account => account.id === updated.id ? updated : account)
 }
 
 function openAccount(account?: Account) {

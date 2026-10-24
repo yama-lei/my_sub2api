@@ -21,8 +21,8 @@ export interface ClaudeResetCredits {
   fetched_at: string
 }
 
-export async function getClaudeResetCredits(id: number): Promise<ClaudeResetCredits> {
-  const { data } = await apiClient.get<ClaudeResetCredits>(`/admin/accounts/${id}/claude/reset-credits`)
+export async function getClaudeResetCredits(id: number, basePath: '/admin' | '/relay' = '/admin'): Promise<ClaudeResetCredits> {
+  const { data } = await apiClient.get<ClaudeResetCredits>(`${basePath}/accounts/${id}/claude/reset-credits`)
   return data
 }
 
@@ -39,8 +39,8 @@ export interface ClaudeResetOutcome {
 
 // Consumes one reset credit (irreversible). The server picks the grant; the key
 // identifies one operator confirmation and must be reused when retrying it.
-export async function redeemClaudeResetCredit(id: number, idempotencyKey: string): Promise<ClaudeResetOutcome> {
-  const { data } = await apiClient.post<ClaudeResetOutcome>(`/admin/accounts/${id}/claude/reset-credits/redeem`, undefined, {
+export async function redeemClaudeResetCredit(id: number, idempotencyKey: string, basePath: '/admin' | '/relay' = '/admin'): Promise<ClaudeResetOutcome> {
+  const { data } = await apiClient.post<ClaudeResetOutcome>(`${basePath}/accounts/${id}/claude/reset-credits/redeem`, undefined, {
     headers: { 'Idempotency-Key': idempotencyKey }
   })
   return data

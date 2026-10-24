@@ -970,9 +970,9 @@ export interface OpenAIQuotaRefreshResult extends OpenAIQuotaUsage {
  * API consumers; the panel always wants the snapshot persisted, so it has no
  * client binding here.
  */
-export async function refreshOpenAIQuota(id: number): Promise<OpenAIQuotaRefreshResult> {
+export async function refreshOpenAIQuota(id: number, basePath: '/admin' | '/relay' = '/admin'): Promise<OpenAIQuotaRefreshResult> {
   const { data } = await apiClient.post<OpenAIQuotaRefreshResult>(
-    `/admin/openai/accounts/${id}/quota/refresh`
+    `${basePath}/openai/accounts/${id}/quota/refresh`
   )
   return data
 }
@@ -1002,9 +1002,9 @@ export async function sendOpenAIReferralInvite(
  * timeout: aborting locally would report a successful consumption as a failure
  * and invite a retry that spends a second credit.
  */
-export async function resetOpenAIQuota(id: number): Promise<OpenAIQuotaResetResult> {
+export async function resetOpenAIQuota(id: number, basePath: '/admin' | '/relay' = '/admin'): Promise<OpenAIQuotaResetResult> {
   const { data } = await apiClient.post<OpenAIQuotaResetResult>(
-    `/admin/openai/accounts/${id}/reset-quota`,
+    `${basePath}/openai/accounts/${id}/reset-quota`,
     undefined,
     { timeout: 90_000 }
   )

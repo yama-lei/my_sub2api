@@ -39,7 +39,7 @@ func (ChannelMonitorRequestTemplate) Fields() []ent.Field {
 			NotEmpty().
 			MaxLen(100),
 		field.Enum("provider").
-			Values("openai", "anthropic", "gemini", "grok",
+			Values("openai", "anthropic", "gemini", "grok", "qoder",
 				"antigravity", "kimi", "zhipu", "deepseek", "minimax", "opencode_go"),
 		field.String("api_mode").
 			Default("chat_completions").

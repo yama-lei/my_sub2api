@@ -66,6 +66,26 @@ beforeEach(() => {
   vi.mocked(resetOpenAIQuota).mockReset()
 })
 
+it('queries and confirms a quota reset in the account owner relay scope', async () => {
+  vi.mocked(refreshOpenAIQuota).mockResolvedValue({
+    fetched_at: 1770000000,
+    cache_persisted: true,
+    rate_limit_reset_credits: { available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }] },
+  })
+  vi.mocked(resetOpenAIQuota).mockResolvedValue({ code: 'success', windows_reset: 1, cache_refreshed: false, account_state_recovered: true })
+  const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({}), basePath: '/relay' } })
+  await wrapper.findAll('button')[0].trigger('click')
+  await flushPromises()
+  expect(refreshOpenAIQuota).toHaveBeenCalledWith(1, '/relay')
+  expect(wrapper.findComponent({ name: 'OpenAIReferralCell' }).exists()).toBe(false)
+  await resetButton(wrapper).trigger('click')
+  expect(resetOpenAIQuota).not.toHaveBeenCalled()
+  wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+  await flushPromises()
+  expect(resetOpenAIQuota).toHaveBeenCalledWith(1, '/relay')
+  wrapper.unmount()
+})
+
 describe('OpenAIQuotaResetCell — Codex 点数', () => {
   const points = (wrapper: ReturnType<typeof mount>) => wrapper.get('[data-testid="codex-credits"]')
   const balance = { has_credits: true, unlimited: false, balance: '12345678901234567890.0123' }
@@ -86,7 +106,7 @@ describe('OpenAIQuotaResetCell — Codex 点数', () => {
     expect(points(wrapper).text()).toContain('—')
     await points(wrapper).trigger('click')
     await flushPromises()
-    expect(refreshOpenAIQuota).toHaveBeenCalledWith(1)
+    expect(refreshOpenAIQuota).toHaveBeenCalledWith(1, '/admin')
     expect(points(wrapper).text()).toContain(expected)
     expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
     expect(resetOpenAIQuota).not.toHaveBeenCalled()
@@ -253,7 +273,7 @@ describe('OpenAIQuotaResetCell — 外审 F6:影子禁用重置', () => {
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
 
-    expect(refreshOpenAIQuota).toHaveBeenCalledWith(1)
+    expect(refreshOpenAIQuota).toHaveBeenCalledWith(1, '/admin')
     expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.expiresAt:')
     expect(wrapper.text()).toContain('+2')
     expect(wrapper.text()).not.toContain('not-a-date')
@@ -351,7 +371,7 @@ describe('OpenAIQuotaResetCell — 外审 F6:影子禁用重置', () => {
     wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
     await flushPromises()
 
-    expect(resetOpenAIQuota).toHaveBeenCalledWith(1)
+    expect(resetOpenAIQuota).toHaveBeenCalledWith(1, '/admin')
     expect(refreshOpenAIQuota).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="codex-credits"]').text()).toContain('999.25')
     expect(wrapper.text()).not.toContain('admin.accounts.openaiQuotaReset.expiresAt:')

@@ -42,6 +42,21 @@ async function confirmReset(wrapper: ReturnType<typeof mount>) {
 describe('Claude reset credit status', () => {
   beforeEach(() => { getCredits.mockReset(); redeem.mockReset() })
 
+  it('lets an owner query and confirm a reset through the relay scope', async () => {
+    getCredits.mockResolvedValue(snapshot)
+    redeem.mockResolvedValue({ outcome: 'reset', cleared: ['five_hour'], replayed: false })
+    const wrapper = mount(ClaudeResetCreditsCell, { props: { account, basePath: '/relay' } })
+    await countButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(getCredits).toHaveBeenCalledWith(1, '/relay')
+    await redeemButton(wrapper).trigger('click')
+    expect(redeem).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="confirm-ok"]').trigger('click')
+    await flushPromises()
+    expect(redeem).toHaveBeenCalledWith(1, expect.stringMatching(/^claude-reset-1-/), '/relay')
+    wrapper.unmount()
+  })
+
   it('queries only on explicit request and shows count and expiry', async () => {
     getCredits.mockResolvedValue(snapshot)
     const wrapper = mount(ClaudeResetCreditsCell, { props: { account } })
@@ -49,7 +64,7 @@ describe('Claude reset credit status', () => {
     expect(countButton(wrapper).text()).toBe('admin.accounts.claudeResetCredits.count')
     await countButton(wrapper).trigger('click')
     await flushPromises()
-    expect(getCredits).toHaveBeenCalledWith(1)
+    expect(getCredits).toHaveBeenCalledWith(1, '/admin')
     expect(countButton(wrapper).text()).toBe('admin.accounts.claudeResetCredits.count1')
     const expiry = wrapper.get('[data-testid="claude-reset-expiry"]')
     expect(expiry.attributes('title')).toContain('Launch reset')

@@ -277,6 +277,18 @@ func usageQuotaTiers(usage *UsageInfo) []domain.MonitorQuotaTier {
 		return nil
 	}
 	tiers := make([]domain.MonitorQuotaTier, 0, 8)
+	if usage.QoderCredits != nil && usage.QoderCredits.Credits != nil {
+		credits := usage.QoderCredits.Credits
+		pool := credits.Subscription
+		if pool.Total != nil && *pool.Total > 0 {
+			tier := domain.MonitorQuotaTier{Window: "total", Label: "Credits", Used: pool.Used,
+				Limit: *pool.Total, UsedPercent: pool.Used / *pool.Total * 100}
+			if credits.PeriodEndAt != nil {
+				tier.ResetAt = credits.PeriodEndAt.UTC().Format(time.RFC3339)
+			}
+			tiers = append(tiers, tier)
+		}
+	}
 	appendProgressTier(&tiers, "5h", "", usage.FiveHour)
 	appendProgressTier(&tiers, "7d", "", usage.SevenDay)
 	appendProgressTier(&tiers, "7d-sonnet", "", usage.SevenDaySonnet)

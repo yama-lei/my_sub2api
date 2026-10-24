@@ -65,6 +65,7 @@ const (
 	MonitorProviderAnthropic   = "anthropic"
 	MonitorProviderGemini      = "gemini"
 	MonitorProviderGrok        = "grok"
+	MonitorProviderQoder       = "qoder"
 	MonitorProviderAntigravity = "antigravity"
 	MonitorProviderKimi        = "kimi"
 	MonitorProviderZhipu       = "zhipu"

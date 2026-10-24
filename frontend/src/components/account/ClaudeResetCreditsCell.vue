@@ -128,7 +128,7 @@ import {
 } from '@/api/admin/claudeResetCredits'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
-const props = defineProps<{ account: Account }>()
+const props = withDefaults(defineProps<{ account: Account; basePath?: '/admin' | '/relay' }>(), { basePath: '/admin' })
 // Fired after a redemption attempt so the parent can refresh the usage row.
 const emit = defineEmits<{ redeemed: [outcome: ClaudeResetOutcome] }>()
 const { t } = useI18n()
@@ -297,7 +297,7 @@ async function confirmRedeem() {
   redeeming.value = true
   redeemFeedback.value = null
   try {
-    const result = await redeemClaudeResetCredit(accountID, pendingKey)
+    const result = await redeemClaudeResetCredit(accountID, pendingKey, props.basePath)
     if (current !== generation) return
     // A definite server answer ends this confirmation; the next one gets a new key.
     pendingKey = null
@@ -321,7 +321,7 @@ async function refresh() {
   loading.value = true
   error.value = false
   try {
-    const result = await getClaudeResetCredits(props.account.id)
+    const result = await getClaudeResetCredits(props.account.id, props.basePath)
     if (current === generation) status.value = result
   } catch {
     if (current === generation) { error.value = true; status.value = null }

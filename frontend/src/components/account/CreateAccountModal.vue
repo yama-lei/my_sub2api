@@ -149,6 +149,20 @@
           </button>
           <button
             type="button"
+            data-testid="qoder-platform-select"
+            @click="form.platform = 'qoder'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'qoder'
+                ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600 dark:text-primary-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="qoder" size="sm" />
+            Qoder
+          </button>
+          <button
+            type="button"
             @click="form.platform = 'grok'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -453,6 +467,12 @@
           </button>
 
         </div>
+      </div>
+
+      <!-- Qoder uses native web device authorization. -->
+      <div v-if="form.platform === 'qoder'" class="rounded-lg border border-primary-200 bg-primary-50 p-4 dark:border-primary-800 dark:bg-primary-900/20">
+        <div class="flex items-center gap-2 font-medium text-gray-900 dark:text-white"><PlatformIcon platform="qoder" size="sm" /><span>Qoder OAuth</span></div>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ t('admin.accounts.qoder.description') }}</p>
       </div>
 
       <!-- Account Type Selection (Grok) -->
@@ -3605,7 +3625,8 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
-      <OAuthAuthorizationFlow
+      <QoderOAuthFlow v-if="form.platform === 'qoder'" :input="qoderOAuthInput" @completed="handleQoderCreated" />
+      <OAuthAuthorizationFlow v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -4057,6 +4078,7 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import QoderOAuthFlow from './QoderOAuthFlow.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -4081,6 +4103,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
+  if (form.platform === 'qoder') return t('admin.accounts.qoder.title')
   if (form.platform === 'grok') return t('admin.accounts.oauth.grok.title')
   return t('admin.accounts.oauth.title')
 })
@@ -4990,6 +5013,11 @@ watch(
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
     }
+    if (newPlatform === 'qoder') {
+      accountCategory.value = 'oauth-based'
+      addMethod.value = 'oauth'
+      form.concurrency = 2
+    }
     if (newPlatform === 'grok') {
       accountCategory.value = 'oauth-based'
       addMethod.value = 'oauth'
@@ -5741,6 +5769,15 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
   if (!file) return
   applyVertexServiceAccountJson(await file.text())
 }
+
+const qoderOAuthInput = computed(() => ({
+  name: form.name, notes: form.notes || undefined, proxy_id: form.proxy_id,
+  group_ids: [...form.group_ids], concurrency: form.concurrency, priority: form.priority,
+  rate_multiplier: form.rate_multiplier, load_factor: form.load_factor,
+  expires_at: form.expires_at, auto_pause_on_expired: autoPauseOnExpired.value,
+  extra: buildOpenAIExtra()
+}))
+const handleQoderCreated = () => { emit('created'); handleClose() }
 
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)

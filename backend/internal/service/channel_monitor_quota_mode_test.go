@@ -366,6 +366,10 @@ func TestNormalizeMonitorPrimaryModel_QuotaDefault(t *testing.T) {
 
 func TestProviderProbeCapabilityMatrix(t *testing.T) {
 	require.False(t, providerSupportsProbe(MonitorProviderAntigravity))
+	require.False(t, providerSupportsProbe(MonitorProviderQoder))
+	require.NoError(t, validateProvider(MonitorProviderQoder))
+	require.NoError(t, validateCheckMode(MonitorProviderQoder, MonitorCheckModeQuota))
+	require.Error(t, validateCheckMode(MonitorProviderQoder, MonitorCheckModeProbe))
 	for _, p := range []string{
 		MonitorProviderOpenAI, MonitorProviderAnthropic, MonitorProviderGemini,
 		MonitorProviderGrok, MonitorProviderKimi, MonitorProviderZhipu, MonitorProviderDeepseek,

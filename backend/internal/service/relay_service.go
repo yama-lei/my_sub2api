@@ -185,6 +185,7 @@ func ValidateRelayCredentials(kind string, credentials map[string]any) error {
 		account_mode upstream_protocol auth_mode api_protocol protocol_rules header_override_enabled header_overrides intercept_warmup_requests
 		id_token client_id chatgpt_account_id chatgpt_user_id chatgpt_account_is_fedramp plan_type subscription_expires_at
 		tier_id oauth_type sub team_id subscription_tier entitlement_status
+		user_id name organization_name user_type machine_id machine_type machine_token
 		openai_capabilities pool_mode pool_mode_retry_count pool_mode_retry_status_codes
 		custom_error_codes_enabled custom_error_codes temp_unschedulable_enabled temp_unschedulable_rules
 		zhipu_organization zhipu_project account_scheduling_threshold agent_identity agent_runtime_id agent_private_key task_id

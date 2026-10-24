@@ -17,6 +17,8 @@ func registerRelayAccountRoutes(relay *gin.RouterGroup, h *handler.Handlers) {
 	accounts.POST("/:id/apply-oauth-credentials", h.Relay.RequireOwnedAccount, h.Admin.Account.ApplyOAuthCredentials)
 	accounts.POST("/:id/clear-error", h.Relay.RequireOwnedAccount, h.Admin.Account.ClearError)
 	accounts.GET("/:id/usage", h.Relay.RequireOwnedAccount, h.Admin.Account.GetUsage)
+	accounts.GET("/:id/claude/reset-credits", h.Relay.RequireOwnedAccount, h.Admin.Account.ClaudeResetCredits)
+	accounts.POST("/:id/claude/reset-credits/redeem", h.Relay.RequireOwnedAccount, h.Admin.Account.RedeemClaudeResetCredit)
 	accounts.GET("/:id/stats", h.Relay.RequireOwnedAccount, h.Admin.Account.GetStats)
 	accounts.POST("/:id/models/sync-upstream", h.Relay.RequireOwnedAccount, h.Admin.Account.SyncUpstreamModels)
 	accounts.GET("/:id/grok-media-eligibility", h.Relay.RequireOwnedAccount, h.Admin.Account.GetGrokMediaEligibility)
@@ -41,6 +43,9 @@ func registerRelayAccountRoutes(relay *gin.RouterGroup, h *handler.Handlers) {
 	openai.POST("/exchange-code", h.Admin.OpenAIOAuth.ExchangeCode)
 	openai.POST("/refresh-token", h.Admin.OpenAIOAuth.RefreshToken)
 	openai.POST("/create-from-codex-pat", h.Admin.OpenAIOAuth.CreateAccountFromCodexPAT)
+	openai.GET("/accounts/:id/quota", h.Relay.RequireOwnedAccount, h.Admin.OpenAIOAuth.QueryQuota)
+	openai.POST("/accounts/:id/quota/refresh", h.Relay.RequireOwnedAccount, h.Admin.OpenAIOAuth.RefreshQuota)
+	openai.POST("/accounts/:id/reset-quota", h.Relay.RequireOwnedAccount, h.Admin.OpenAIOAuth.ResetQuota)
 
 	gemini := relay.Group("/gemini/oauth")
 	gemini.POST("/auth-url", h.Admin.GeminiOAuth.GenerateAuthURL)
@@ -51,6 +56,15 @@ func registerRelayAccountRoutes(relay *gin.RouterGroup, h *handler.Handlers) {
 	antigravity.POST("/auth-url", h.Admin.AntigravityOAuth.GenerateAuthURL)
 	antigravity.POST("/exchange-code", h.Admin.AntigravityOAuth.ExchangeCode)
 	antigravity.POST("/refresh-token", h.Admin.AntigravityOAuth.RefreshToken)
+
+	if h.Admin.QoderOAuth != nil {
+		qoder := relay.Group("/qoder/oauth")
+		qoder.POST("/start", h.Admin.QoderOAuth.Begin)
+		qoder.POST("/poll", h.Admin.QoderOAuth.Poll)
+		qoder.POST("/cancel", h.Admin.QoderOAuth.Cancel)
+		qoder.POST("/commit", h.Admin.QoderOAuth.Commit)
+		relay.GET("/qoder/credits/accounts/:id", h.Relay.RequireOwnedAccount, h.Admin.QoderOAuth.AccountCredits)
+	}
 
 	grok := relay.Group("/grok")
 	grok.GET("/oauth/capabilities", h.Admin.GrokOAuth.GetCapabilities)

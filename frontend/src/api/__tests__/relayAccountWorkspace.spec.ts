@@ -42,4 +42,9 @@ describe('relay account workspace', () => {
     ])
     expect(client.get.mock.calls.map(call => call[0])).toEqual(['/relay/accounts/7/models', '/relay/accounts/7/stats'])
   })
+
+  it('queries native account usage through the ownership-checked user endpoint', async () => {
+    await relayAccountWorkspace.api.accounts.getUsage(7, 'active', true)
+    expect(client.get).toHaveBeenCalledWith('/relay/accounts/7/usage', { params: { source: 'active', force: true } })
+  })
 })

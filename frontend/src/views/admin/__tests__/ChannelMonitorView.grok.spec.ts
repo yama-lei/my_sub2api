@@ -88,7 +88,7 @@ function mountDialog() {
   })
 }
 
-describe('channel monitor Grok provider', () => {
+describe('channel monitor native providers', () => {
   beforeEach(() => {
     listTemplates.mockReset().mockResolvedValue({ items: [] })
     accountsList.mockReset().mockResolvedValue({ items: [] })
@@ -101,7 +101,7 @@ describe('channel monitor Grok provider', () => {
 
     expect(PROVIDERS).toContain(PROVIDER_GROK)
     const providerButtons = wrapper.findAll('[data-testid^="monitor-provider-"]')
-    expect(providerButtons).toHaveLength(10)
+    expect(providerButtons).toHaveLength(PROVIDERS.length)
     expect(providerButtons[0].element.parentElement?.className).toContain('grid-cols-2')
     expect(providerButtons[0].element.parentElement?.className).toContain('sm:grid-cols-4')
 
@@ -126,6 +126,21 @@ describe('channel monitor Grok provider', () => {
     await wrapper.get('[data-testid="monitor-provider-openai"]').trigger('click')
     expect((endpoint.element as HTMLInputElement).value).toBe('https://gateway.example.com')
     expect((model.element as HTMLInputElement).value).toBe('grok-custom')
+  })
+
+  it('adds Qoder to the existing account quota monitor flow', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    await wrapper.get('[data-testid="monitor-provider-qoder"]').trigger('click')
+    expect(wrapper.get('[data-testid="monitor-provider-qoder"] img').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="monitor-check-mode-probe"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="monitor-check-mode-quota_probe"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="monitor-linked-account"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="monitor-provider-antigravity"]').trigger('click')
+    expect(wrapper.get('[data-testid="monitor-linked-account"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="monitor-provider-openai"]').trigger('click')
+    expect(wrapper.get('[data-testid="monitor-check-mode-probe"]').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('prefills only empty Grok fields and preserves existing provider values', async () => {
