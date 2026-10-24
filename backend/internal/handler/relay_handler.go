@@ -68,7 +68,7 @@ func (h *RelayHandler) Groups(c *gin.Context) {
 	}
 	private := make([]*dto.Group, 0, len(groups))
 	for i := range groups {
-		private = append(private, dto.GroupFromService(&groups[i]))
+		private = append(private, dto.GroupFromService(&groups[i]).Localized(c.GetHeader("Accept-Language")))
 	}
 	available, err := h.keys.GetAvailableGroups(c.Request.Context(), userID)
 	if response.ErrorFrom(c, err) {
@@ -77,7 +77,7 @@ func (h *RelayHandler) Groups(c *gin.Context) {
 	public := []*dto.Group{}
 	for i := range available {
 		if available[i].IsPublicRelay() {
-			public = append(public, dto.GroupFromService(&available[i]))
+			public = append(public, dto.GroupFromService(&available[i]).Localized(c.GetHeader("Accept-Language")))
 		}
 	}
 	response.Success(c, gin.H{"private_groups": private, "public_groups": public})
@@ -107,7 +107,7 @@ func (h *RelayHandler) CreateGroup(c *gin.Context) {
 	if response.ErrorFrom(c, err) {
 		return
 	}
-	response.Created(c, dto.GroupFromService(g))
+	response.Created(c, dto.GroupFromService(g).Localized(c.GetHeader("Accept-Language")))
 }
 
 func (h *RelayHandler) UpdateGroup(c *gin.Context) {
@@ -131,7 +131,7 @@ func (h *RelayHandler) UpdateGroup(c *gin.Context) {
 	if response.ErrorFrom(c, err) {
 		return
 	}
-	response.Success(c, dto.GroupFromService(g))
+	response.Success(c, dto.GroupFromService(g).Localized(c.GetHeader("Accept-Language")))
 }
 
 func (h *RelayHandler) DeleteGroup(c *gin.Context) {

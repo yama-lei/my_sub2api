@@ -19,15 +19,15 @@ vi.mock('vue-i18n', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
-    grok: {
-      generateAuthUrl: vi.fn(),
-      exchangeCode: vi.fn(),
-      refreshGrokToken: vi.fn()
-    }
+const adminAPIMock = vi.hoisted(() => ({
+  grok: {
+    generateAuthUrl: vi.fn(),
+    exchangeCode: vi.fn(),
+    refreshGrokToken: vi.fn()
   }
 }))
+vi.mock('@/api/admin', () => ({ adminAPI: adminAPIMock }))
+vi.mock('@/composables/useAccountWorkspace', () => ({ useAccountWorkspace: () => ({ api: adminAPIMock }) }))
 
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import { adminAPI } from '@/api/admin'

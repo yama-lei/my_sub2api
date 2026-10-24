@@ -12,15 +12,15 @@ vi.mock('vue-i18n', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
-    antigravity: {
-      generateAuthUrl: vi.fn(),
-      exchangeCode: vi.fn(),
-      refreshAntigravityToken: vi.fn()
-    }
+const adminAPIMock = vi.hoisted(() => ({
+  antigravity: {
+    generateAuthUrl: vi.fn(),
+    exchangeCode: vi.fn(),
+    refreshAntigravityToken: vi.fn()
   }
 }))
+vi.mock('@/api/admin', () => ({ adminAPI: adminAPIMock }))
+vi.mock('@/composables/useAccountWorkspace', () => ({ useAccountWorkspace: () => ({ api: adminAPIMock }) }))
 
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 
