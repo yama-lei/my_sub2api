@@ -49,28 +49,36 @@ npm install -g pnpm
 |----------|----------|----------|
 | **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.13 |
 | **security-scan.yml** | push, pull_request, 每周一 | govulncheck + gosec + pnpm audit |
-| **release.yml** | tag `v*` | 构建发布（PR 不触发） |
 
 ### CI 要求
 
-- Go 版本必须是 **1.27.0**：三个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.0'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`（两处）、`release.yml`、`security-scan.yml` 里的这句断言，**以及三个 Dockerfile 里的 Go 构建镜像**（`Dockerfile` / `deploy/Dockerfile` 的 `ARG GOLANG_IMAGE`、`backend/Dockerfile` 的 `FROM golang:`）。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人用这些 Dockerfile 构建时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
+- Go 版本必须是 **1.27.0**：两个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.0'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`、`security-scan.yml` 里的这句断言，**以及根目录 `Dockerfile` 的 `ARG GOLANG_IMAGE`**。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人构建镜像时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
-### 本地测试命令
+### 本地命令（统一从仓库根目录执行）
 
-```bash
-# 后端单元测试
-cd backend && go test -tags=unit ./...
+| 命令 | 作用 |
+|---|---|
+| `make docker-dev` | 本地 docker 开发（构建并启动 sub2api + postgres + redis，读取 `deploy/.env`） |
+| `make docker-build` | 仅构建 dev 镜像 |
+| `make image` | 构建 `sub2api:latest` 镜像 |
+| `make deploy` | 构建当前已提交源码镜像并推送到服务器（配置见 `deploy/deploy.yaml`） |
+| `make build` / `build-backend` / `build-frontend` | 编译 |
+| `make run` | 构建前端、嵌入后端并运行 |
+| `make generate` | 重新生成 Ent / Wire 代码 |
+| `make test` | 后端测试 + lint，前端 lint / typecheck / 关键用例 |
+| `make test-unit` / `test-integration` / `test-e2e-local` | 后端分类测试 |
 
-# 后端集成测试
-cd backend && go test -tags=integration ./...
+前端依赖安装必须用 pnpm：`cd frontend && pnpm install`。
 
-# 代码质量检查
-cd backend && golangci-lint run ./...
+### 开发与部署流程
 
-# 前端依赖安装（必须用 pnpm）
-cd frontend && pnpm install
-```
+1. 本地开发：`cp deploy/.env.example deploy/.env`，填写 `POSTGRES_PASSWORD` 等，然后 `make docker-dev`。
+2. 提交代码（`make deploy` 要求工作区完全干净，含未跟踪文件）。
+3. 首次部署：`cp deploy/deploy.example.yaml deploy/deploy.yaml` 并填写服务器信息；服务器上需已有 `docker-compose.yml`、`.env` 与运行中的 postgres / redis。
+4. `make deploy`：本地构建 linux/amd64 镜像 → `docker save` 经 ssh 推送 → 服务器仅替换 sub2api 容器并做健康检查。更新前的 compose 与旧镜像会记录在服务器 `backups/update-*` 中（不含数据库备份）。
+
+当前不发布 release 或公共镜像。
 
 ## 四、常见坑点 & 解决方案
 
@@ -183,7 +191,7 @@ grep -r "type.*Mock.*struct" internal/
 
 ### 坑 8：Windows 没有 make 命令
 
-**问题**：CI 里用 `make test-unit`，本地 Windows 没有 make。
+**问题**：本地 Windows 没有 make。
 
 **解决**：直接用 Makefile 里的原始命令：
 ```bash
