@@ -2,7 +2,7 @@
 # Sub2API Deploy Directory - Git Ignore
 # =============================================================================
 
-# Data directories (generated at runtime when using docker-compose.local.yml)
+# Data directories (generated at runtime by local runs)
 data/
 postgres_data/
 redis_data/
@@ -17,3 +17,6 @@ redis_data/
 # Temporary files
 *.tmp
 *.log
+
+# Local deploy target (host/user/path)
+deploy.yaml

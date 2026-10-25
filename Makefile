@@ -1,6 +1,9 @@
-.PHONY: build build-backend build-frontend run docker-build docker-dev deploy test test-backend test-frontend test-frontend-critical
+.PHONY: build build-backend build-frontend run generate docker-build docker-dev image deploy test test-backend test-unit test-integration test-e2e-local test-frontend test-frontend-critical
 
-DOCKER_DEV := docker compose --env-file deploy/.env -p sub2api-dev -f deploy/docker-compose.dev.yml -f deploy/docker-compose.dev.override.yml
+DOCKER_DEV := docker compose --env-file deploy/.env -p sub2api-dev -f deploy/docker-compose.dev.yml
+
+VERSION ?= $(shell sh backend/scripts/resolve-version.sh)
+LDFLAGS ?= -s -w -X main.Version=$(VERSION)
 
 FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
@@ -47,9 +50,13 @@ FRONTEND_CRITICAL_VITEST := \
 # 一键编译前后端
 build: build-backend build-frontend
 
-# 编译后端（复用 backend/Makefile）
+# 编译后端（不嵌入前端）
 build-backend:
-	@$(MAKE) -C backend build
+	@cd backend && CGO_ENABLED=0 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -trimpath -o bin/server ./cmd/server
+
+# 重新生成 Ent 与 Wire 代码
+generate:
+	@cd backend && go generate ./ent && go generate ./cmd/server
 
 # 编译前端（需要已安装依赖）
 build-frontend:
@@ -57,7 +64,7 @@ build-frontend:
 
 # 先编译前端，再嵌入后端二进制并启动。
 run: build-frontend
-	@$(MAKE) -C backend build GOFLAGS="$(GOFLAGS) -tags=embed"
+	@$(MAKE) build-backend GOFLAGS="$(GOFLAGS) -tags=embed"
 	@cd backend && exec ./bin/server
 
 docker-build:
@@ -66,6 +73,9 @@ docker-build:
 docker-dev:
 	@$(DOCKER_DEV) up --build
 
+image:
+	@docker build -t sub2api:latest -f Dockerfile .
+
 deploy:
 	@bash deploy/deploy.sh
 
@@ -73,7 +83,16 @@ deploy:
 test: test-backend test-frontend
 
 test-backend:
-	@$(MAKE) -C backend test
+	@cd backend && go test ./... && golangci-lint run ./...
+
+test-unit:
+	@cd backend && go test -tags=unit ./...
+
+test-integration:
+	@cd backend && go test -tags=integration ./...
+
+test-e2e-local:
+	@cd backend && go test -tags=e2e -v -timeout=300s ./internal/integration/...
 
 test-frontend:
 	@pnpm --dir frontend run lint:check

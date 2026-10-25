@@ -1,16 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_HOST="gcp"
-SSH_PORT=22
-REMOTE_USER="rayama114514"
-REMOTE_DIR="/home/rayama114514/op-for-machne/sub2api-deploy"
-PROJECT_NAME="sub2api-deploy"
-APP_CONTAINER="sub2api"
-LOCAL_IMAGE="sub2api:local"
-
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
+
+# 读取 deploy/deploy.yaml（扁平 key: value，仅接受白名单键，不 eval）。
+# 可用环境变量 DEPLOY_CONFIG 指定其他配置文件，例如多台服务器。
+config_file=${DEPLOY_CONFIG:-$repo_root/deploy/deploy.yaml}
+[[ -r $config_file ]] || {
+    echo "Missing $config_file. Copy deploy/deploy.example.yaml to deploy/deploy.yaml and edit it." >&2
+    exit 1
+}
+declare -A cfg=([ssh_port]=22 [local_image]=sub2api:local [app_container]=sub2api)
+while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%%#*}
+    [[ $line =~ ^[[:space:]]*([a-z_]+):[[:space:]]*(.*[^[:space:]])?[[:space:]]*$ ]] || continue
+    key=${BASH_REMATCH[1]}
+    value=${BASH_REMATCH[2]:-}
+    value=${value#\"}; value=${value%\"}
+    case $key in
+        ssh_host|ssh_port|remote_user|remote_dir|project_name|app_container|local_image) cfg[$key]=$value ;;
+        *) echo "Unknown key in $config_file: $key" >&2; exit 1 ;;
+    esac
+done < "$config_file"
+for key in ssh_host remote_user remote_dir project_name; do
+    [[ -n ${cfg[$key]:-} ]] || { echo "Missing required key in $config_file: $key" >&2; exit 1; }
+done
+SSH_HOST=${cfg[ssh_host]} SSH_PORT=${cfg[ssh_port]} REMOTE_USER=${cfg[remote_user]}
+REMOTE_DIR=${cfg[remote_dir]} PROJECT_NAME=${cfg[project_name]}
+APP_CONTAINER=${cfg[app_container]} LOCAL_IMAGE=${cfg[local_image]}
 
 require_clean_worktree() {
     if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then

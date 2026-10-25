@@ -1,0 +1,11 @@
+# 部署配置。复制为 deploy/deploy.yaml 后修改（该文件已被 git 忽略）。
+# 运行: make deploy    或    DEPLOY_CONFIG=/path/other.yaml make deploy
+# 构建当前已提交的源码镜像，传到远程服务器并更新 sub2api 容器。
+
+ssh_host: tencent            # 必填，~/.ssh/config 中的别名或 user@host
+ssh_port: 22
+remote_user: root            # 必填，远程执行 docker 的用户（通过 sudo -n -u 切换）
+remote_dir: /root/sub2api    # 必填，远程 docker-compose.yml 与 .env 所在目录
+project_name: sub2api-deploy # 必填，docker compose 项目名
+app_container: sub2api
+local_image: sub2api:local

@@ -10,19 +10,23 @@
 
 services:
   sub2api:
+    image: sub2api:local
     build:
       context: ..
       dockerfile: Dockerfile
+      network: host
       args:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
     container_name: sub2api-dev
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     security_opt:
       - no-new-privileges:true
     ports:
       - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
     volumes:
-      - ./data:/app/data:Z
+      - app_data:/app/data
     environment:
       - AUTO_SETUP=true
       - SERVER_HOST=0.0.0.0
@@ -51,9 +55,12 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
       # Local mainland-China development proxy. Containers cannot use
       # 127.0.0.1 for the host proxy, so default to Docker Desktop's host name.
-      - HTTP_PROXY=${SUB2API_DEV_HTTP_PROXY:-http://host.docker.internal:7897}
-      - HTTPS_PROXY=${SUB2API_DEV_HTTPS_PROXY:-http://host.docker.internal:7897}
-      - ALL_PROXY=${SUB2API_DEV_ALL_PROXY:-socks5://host.docker.internal:7897}
+      - HTTP_PROXY=${SUB2API_DEV_HTTP_PROXY:-}
+      - HTTPS_PROXY=${SUB2API_DEV_HTTPS_PROXY:-}
+      - ALL_PROXY=${SUB2API_DEV_ALL_PROXY:-}
+      - http_proxy=${SUB2API_DEV_HTTP_PROXY:-}
+      - https_proxy=${SUB2API_DEV_HTTPS_PROXY:-}
+      - all_proxy=${SUB2API_DEV_ALL_PROXY:-}
       - NO_PROXY=${SUB2API_DEV_NO_PROXY:-127.0.0.1,localhost,::1,postgres,redis,sub2api,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,.local}
       # Gateway values come from Compose .env or the shell.
       # Fallbacks mirror Sub2API backend defaults so omitted values preserve behavior.
@@ -114,7 +121,7 @@ services:
     networks:
       - sub2api-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-Y", "off", "-q", "-T", "5", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -125,7 +132,7 @@ services:
     container_name: sub2api-postgres-dev
     restart: unless-stopped
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data:Z
+      - postgres_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-sub2api}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -146,7 +153,7 @@ services:
     container_name: sub2api-redis-dev
     restart: unless-stopped
     volumes:
-      - ./redis_data:/data:Z
+      - redis_data:/data
     command:
       - redis-server
       - --save
@@ -173,3 +180,9 @@ services:
 networks:
   sub2api-network:
     driver: bridge
+
+# 命名卷：避免 NTFS 上的 chmod/chown 限制。
+volumes:
+  app_data:
+  postgres_data:
+  redis_data:
