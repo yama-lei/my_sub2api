@@ -194,6 +194,12 @@ func ValidateRelayCredentials(kind string, credentials map[string]any) error {
 		allowed[key] = true
 	}
 	for key := range credentials {
+		// Underscore-prefixed keys (e.g. _token_version) are backend runtime state that
+		// clients echo back from account reads; drop them instead of rejecting.
+		if strings.HasPrefix(key, "_") {
+			delete(credentials, key)
+			continue
+		}
 		if !allowed[key] {
 			return infraerrors.BadRequest("INVALID_RELAY_CREDENTIAL_FIELD", "unsupported credential field: "+key)
 		}
@@ -308,6 +314,11 @@ func (s *RelayService) prepareUpdateAccount(ctx context.Context, userID int64, a
 			return err
 		}
 		input.Credentials = MergePreservingSensitiveCreds(a.Credentials, input.Credentials)
+		for k, v := range a.Credentials {
+			if strings.HasPrefix(k, "_") {
+				input.Credentials[k] = v
+			}
+		}
 	}
 	if input.GroupIDs != nil {
 		if err := s.validateGroups(ctx, userID, a.Platform, a.Type, *input.GroupIDs); err != nil {
