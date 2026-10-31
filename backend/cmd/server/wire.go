@@ -120,6 +120,7 @@ func provideCleanup(
 	qoderOAuth *service.QoderService,
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
+	accountQuality *service.AccountQualityService,
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
@@ -355,6 +356,12 @@ func provideCleanup(
 			{"ScheduledTestRunnerService", func() error {
 				if scheduledTestRunner != nil {
 					scheduledTestRunner.Stop()
+				}
+				return nil
+			}},
+			{"AccountQualityService", func() error {
+				if accountQuality != nil {
+					accountQuality.Stop()
 				}
 				return nil
 			}},

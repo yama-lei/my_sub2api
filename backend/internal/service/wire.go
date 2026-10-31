@@ -71,6 +71,7 @@ func ProvideAuthService(
 	defaultSubAssigner DefaultSubscriptionAssigner,
 	affiliateService *AffiliateService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	mcpOAuthService *MCPOAuthService,
 ) *AuthService {
 	svc := NewAuthService(
 		entClient,
@@ -89,6 +90,9 @@ func ProvideAuthService(
 	)
 	svc.SetTencentCaptchaService(tencentCaptchaService)
 	svc.SetAliyunCaptchaService(aliyunCaptchaService)
+	if mcpOAuthService != nil {
+		svc.SetMCPGrantRevoker(mcpOAuthService)
+	}
 	return svc
 }
 
@@ -670,6 +674,22 @@ func ProvideScheduledTestRunnerService(
 	return svc
 }
 
+// ProvideAccountQualityService creates AccountQualityService, wires it into the
+// OpenAI gateway (model downgrade events) and starts the ModelTrace probe scheduler.
+func ProvideAccountQualityService(
+	repo AccountQualityRepository,
+	accountRepo AccountRepository,
+	accountTestSvc *AccountTestService,
+	openAIGateway *OpenAIGatewayService,
+) *AccountQualityService {
+	svc := NewAccountQualityService(repo, accountRepo, accountTestSvc)
+	if openAIGateway != nil {
+		openAIGateway.SetAccountQualityService(svc)
+	}
+	svc.Start()
+	return svc
+}
+
 // ProvideOpsScheduledReportService creates and starts OpsScheduledReportService.
 func ProvideOpsScheduledReportService(
 	opsService *OpsService,
@@ -863,6 +883,7 @@ var ProviderSet = wire.NewSet(
 	ProvideAuthService,
 	NewPasskeyService,
 	NewUserService,
+	NewMCPOAuthService,
 	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	ProvideAuthCacheInvalidationWorker,
@@ -974,6 +995,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyCleanupService,
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
+	ProvideAccountQualityService,
 	NewGroupCapacityService,
 	NewChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),

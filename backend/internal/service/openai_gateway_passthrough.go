@@ -178,7 +178,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		if normalized {
 			body = normalizedBody
 		}
-		reqStream = gjson.GetBytes(body, "stream").Bool()
+		// 上游 ChatGPT internal API 要求 stream=true，但下游响应形态必须遵循
+		// 客户端原始的 stream 标志：stream=false 时由非流式分支把上游 SSE
+		// 聚合为单个 JSON（#7978）。compact 请求始终为非流式。
+		if isOpenAIResponsesCompactPath(c) {
+			reqStream = false
+		}
 
 		accountScopedBody, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
 		if scopeErr != nil {
@@ -611,6 +616,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// DeepSeek / Kimi 原生 Responses 端点为无状态实现（见 normalizeDeepSeekResponsesRequestBody）。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
+	// 号池降级防护：上游曾把本会话路由到低级模型时，换一个会话身份迫使其重新调度。
+	reroll := resolveModelDowngradeReroll(c, account, body)
+	body = reroll.applyBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -734,6 +742,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	reroll.applyHeaders(req.Header)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
 	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
@@ -1922,6 +1931,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	// pendingLines 在首个可见输出前保留前导事件，确保无输出失败仍可安全 failover。
 	pendingLines := make([]string, 0, 8)
+	// downgradeChecked: the first upstream-declared model has been compared.
+	downgradeChecked := false
 
 	// ── 首个可见输出之前的下游 keepalive ──────────────────────────────────
 	//
@@ -2038,6 +2049,13 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			trimmedData := strings.TrimSpace(data)
 			rawEventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
 			observer.ObserveOpenAI(dataBytes, rawEventType)
+			if !downgradeChecked && !openAIStreamClientOutputStarted(c, clientOutputStarted) {
+				var downgradeErr *UpstreamFailoverError
+				downgradeChecked, downgradeErr = s.observeModelDowngradeEvent(c, account, dataBytes, mappedModel, true, upstreamRequestID)
+				if downgradeErr != nil {
+					return resultWithUsage(), downgradeErr
+				}
+			}
 			if needModelReplace {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 				if replacedData, replaced := extractOpenAISSEDataLine(line); replaced {
@@ -2338,7 +2356,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	// Some upstreams (e.g. other sub2api instances) may return SSE even when
 	// stream=false was requested. Without this conversion the client would
 	// receive raw SSE text or a terminal event with empty output.
-	if isEventStreamResponse(resp.Header) {
+	// The ChatGPT OAuth upstream may omit Content-Type while still sending SSE,
+	// so OAuth accounts also fall back to the body framing (same rule as
+	// handleNonStreamingResponse).
+	if isEventStreamResponse(resp.Header) || (account != nil && account.Type == AccountTypeOAuth && bodyHasSSEFraming(body)) {
 		return s.handlePassthroughSSEToJSON(resp, c, account, body, originalModel, mappedModel)
 	}
 
@@ -2407,6 +2428,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)
+	if !ok && terminalOK {
+		finalResponse, ok = extractOpenAINonCompletedTerminalResponse(terminalType, terminalPayload)
+	}
 
 	usage := s.parseSSEUsageFromBody(bodyText)
 	if ok {
@@ -2453,6 +2477,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		}
 	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
+		// 上游的 Content-Type（text/event-stream）已复制到响应头，而 c.Data
+		// 不会覆盖已存在的 Content-Type，这里需显式设置为聚合后的类型。
+		c.Writer.Header().Set("Content-Type", contentType)
 		c.Data(resp.StatusCode, contentType, body)
 	}
 
