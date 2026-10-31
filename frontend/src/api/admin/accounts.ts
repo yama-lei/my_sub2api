@@ -1134,6 +1134,78 @@ export async function refreshOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsag
   return data
 }
 
+export interface AccountQualityEvent {
+  id: number
+  account_id: number
+  kind: 'downgrade' | 'probe'
+  requested_model: string
+  observed_model: string
+  verdict: string
+  score?: number | null
+  detail?: Record<string, any> | null
+  created_at: string
+}
+
+export interface AccountQualityMetrics {
+  account_id: number
+  window_hours: number
+  requests: number
+  mismatches: number
+  downgrades: number
+  adulteration_rate?: number | null
+  probes: number
+  probe_fails: number
+  probe_fail_rate?: number | null
+  latest_probe?: AccountQualityEvent | null
+  avg_ttft_ms?: number | null
+  p50_ttft_ms?: number | null
+  p90_ttft_ms?: number | null
+  avg_duration_ms?: number | null
+  tps?: number | null
+}
+
+export async function getBatchQualityMetrics(
+  accountIds: number[],
+  hours = 24
+): Promise<Record<string, AccountQualityMetrics>> {
+  const { data } = await apiClient.get<Record<string, AccountQualityMetrics>>('/admin/accounts/quality', {
+    params: { ids: accountIds.join(','), hours }
+  })
+  return data || {}
+}
+
+export async function getQualityMetrics(id: number, hours = 24): Promise<AccountQualityMetrics | null> {
+  const { data } = await apiClient.get<AccountQualityMetrics | null>(`/admin/accounts/${id}/quality`, {
+    params: { hours }
+  })
+  return data
+}
+
+export async function listQualityEvents(
+  id: number,
+  kind?: 'downgrade' | 'probe',
+  limit = 20
+): Promise<AccountQualityEvent[]> {
+  const { data } = await apiClient.get<AccountQualityEvent[]>(`/admin/accounts/${id}/quality/events`, {
+    params: { kind: kind || undefined, limit }
+  })
+  return data || []
+}
+
+export async function getModelProbeModels(): Promise<string[]> {
+  const { data } = await apiClient.get<string[]>('/admin/accounts/quality/probe-models')
+  return data || []
+}
+
+export async function runModelProbe(id: number, model?: string, expectedModel?: string): Promise<AccountQualityEvent> {
+  const { data } = await apiClient.post<AccountQualityEvent>(
+    `/admin/accounts/${id}/quality/probe`,
+    { model: model || '', expected_model: expectedModel || '' },
+    { timeout: 900000 } // 15min: a probe runs several long upstream generations
+  )
+  return data
+}
+
 export const accountsAPI = {
   list,
   listWithEtag,
@@ -1202,7 +1274,12 @@ export const accountsAPI = {
   updateOpenCodeGoUsageSettings,
   getOpenCodeGoUsage,
   setOpenCodeGoUsageAutoRefresh,
-  refreshOpenCodeGoUsage
+  refreshOpenCodeGoUsage,
+  getBatchQualityMetrics,
+  getQualityMetrics,
+  listQualityEvents,
+  getModelProbeModels,
+  runModelProbe
 }
 
 export default accountsAPI

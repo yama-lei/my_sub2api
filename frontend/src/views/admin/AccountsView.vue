@@ -303,6 +303,9 @@
               :error="todayStatsError"
             />
           </template>
+          <template #cell-quality="{ row }">
+            <AccountQualityCell :metrics="qualityByAccountId[String(row.id)] ?? null" />
+          </template>
           <template #cell-groups="{ row }">
             <AccountGroupsCell :groups="accountGroupsForRow(row)" :max-display="4" />
           </template>
@@ -522,6 +525,8 @@ import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
+import AccountQualityCell from '@/components/account/AccountQualityCell.vue'
+import type { AccountQualityMetrics } from '@/api/admin/accounts'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
 import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
 import UpstreamBillingRateCell from '@/components/account/UpstreamBillingRateCell.vue'
@@ -894,7 +899,38 @@ const queueBatchedUsage = (account: Account, options?: { force?: boolean }) => {
   }, 0)
 }
 
+// Quality metrics aggregate a day of usage logs, so auto-refresh reuses them
+// for a minute unless the visible account set changes.
+const QUALITY_WINDOW_HOURS = 24
+const QUALITY_REFRESH_MIN_INTERVAL_MS = 60_000
+const qualityByAccountId = ref<Record<string, AccountQualityMetrics>>({})
+let qualityFetchedAt = 0
+let qualityFetchedKey = ''
+let qualityReqSeq = 0
+
+const refreshQualityBatch = async (force = false) => {
+  if (hiddenColumns.has('quality')) return
+  const accountIDs = accounts.value.map(account => account.id)
+  const key = accountIDs.join(',')
+  if (!force && key === qualityFetchedKey && Date.now() - qualityFetchedAt < QUALITY_REFRESH_MIN_INTERVAL_MS) return
+  const reqSeq = ++qualityReqSeq
+  if (accountIDs.length === 0) {
+    qualityByAccountId.value = {}
+    return
+  }
+  try {
+    const result = await adminAPI.accounts.getBatchQualityMetrics(accountIDs, QUALITY_WINDOW_HOURS)
+    if (reqSeq !== qualityReqSeq) return
+    qualityByAccountId.value = result
+    qualityFetchedAt = Date.now()
+    qualityFetchedKey = key
+  } catch (error) {
+    console.error('Failed to load account quality metrics:', error)
+  }
+}
+
 const refreshTodayStatsBatch = async () => {
+  void refreshQualityBatch()
   // Why this checks both columns:
   // - today_stats column shows dedicated today's metrics.
   // - usage column also embeds today's stats for Key/Bedrock rows.
@@ -1075,6 +1111,9 @@ const toggleColumn = (key: string) => {
     hiddenColumns.add(key)
   }
   saveColumnsToStorage()
+  if (key === 'quality' && wasHidden) {
+    void refreshQualityBatch(true)
+  }
   if ((key === 'today_stats' || key === 'usage') && wasHidden) {
     refreshTodayStatsBatch().catch((error) => {
       console.error('Failed to load account today stats after showing column:', error)
@@ -1830,7 +1869,8 @@ const allColumns = computed(() => {
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
-    { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
+    { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false },
+    { key: 'quality', label: t('admin.accounts.quality.column'), sortable: false }
   ]
   if (!authStore.isSimpleMode) {
     c.push({ key: 'groups', label: t('admin.accounts.columns.groups'), sortable: false })

@@ -1408,6 +1408,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// DeepSeek / Kimi 原生 Responses 端点为无状态实现：强制 store=false、清除
 	// previous_response_id，避免携带状态字段被上游拒绝。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
+	// 号池降级防护：上游曾把本会话路由到低级模型时，换一个会话身份迫使其重新调度。
+	reroll := resolveModelDowngradeReroll(c, account, body)
+	body = reroll.applyBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -1527,6 +1530,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	reroll.applyHeaders(req.Header)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
 	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {

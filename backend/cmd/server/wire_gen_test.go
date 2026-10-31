@@ -90,6 +90,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // qoderOAuth
 		nil, // openAIGateway
 		nil, // scheduledTestRunner
+		nil, // accountQuality
 		nil, // backupSvc
 		nil, // paymentOrderExpiry
 		nil, // channelMonitorRunner

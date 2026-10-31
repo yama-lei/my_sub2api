@@ -616,6 +616,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// DeepSeek / Kimi 原生 Responses 端点为无状态实现（见 normalizeDeepSeekResponsesRequestBody）。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
+	// 号池降级防护：上游曾把本会话路由到低级模型时，换一个会话身份迫使其重新调度。
+	reroll := resolveModelDowngradeReroll(c, account, body)
+	body = reroll.applyBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -739,6 +742,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 保证不被覆盖丢失）。
 	applyOpenAICodexBetaFeatures(c, account, req.Header)
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	reroll.applyHeaders(req.Header)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
 	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
@@ -1927,6 +1931,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	// pendingLines 在首个可见输出前保留前导事件，确保无输出失败仍可安全 failover。
 	pendingLines := make([]string, 0, 8)
+	// downgradeChecked: the first upstream-declared model has been compared.
+	downgradeChecked := false
 
 	// ── 首个可见输出之前的下游 keepalive ──────────────────────────────────
 	//
@@ -2043,6 +2049,13 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			trimmedData := strings.TrimSpace(data)
 			rawEventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
 			observer.ObserveOpenAI(dataBytes, rawEventType)
+			if !downgradeChecked && !openAIStreamClientOutputStarted(c, clientOutputStarted) {
+				var downgradeErr *UpstreamFailoverError
+				downgradeChecked, downgradeErr = s.observeModelDowngradeEvent(c, account, dataBytes, mappedModel, true, upstreamRequestID)
+				if downgradeErr != nil {
+					return resultWithUsage(), downgradeErr
+				}
+			}
 			if needModelReplace {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 				if replacedData, replaced := extractOpenAISSEDataLine(line); replaced {

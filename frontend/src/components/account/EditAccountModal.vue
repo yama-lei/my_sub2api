@@ -2261,6 +2261,14 @@
         />
       </div>
 
+      <AccountQualitySettings
+        v-if="account && !isRelay"
+        :key="account.id"
+        ref="accountQualitySettingsRef"
+        :account="account"
+        :pool-mode="poolModeEnabled"
+      />
+
       <OllamaCloudUsageSettings
         v-if="!isRelay && account?.ollama_cloud_usage?.eligible"
         :account="account"
@@ -3425,6 +3433,7 @@ import {
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
+import AccountQualitySettings from '@/components/account/AccountQualitySettings.vue'
 import {
   applyAntigravityProjectID,
   applyHeaderOverride,
@@ -3833,6 +3842,7 @@ const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
 const GROK_CLIENT_TOOL_CACHE_EXTRA_KEY = 'grok_client_tool_cache_enabled'
 const poolModeEnabled = ref(false)
+const accountQualitySettingsRef = ref<InstanceType<typeof AccountQualitySettings> | null>(null)
 const explicitCacheUpstreamEnabled = ref(false)
 const explicitCacheUpstreamMaxTTL = ref<string | number>('')
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
@@ -6389,6 +6399,15 @@ const handleSubmit = async () => {
       } else {
         delete newExtra.upstream_request_id_header
       }
+      updatePayload.extra = newExtra
+    }
+
+    // 质量设置（模型降级防护 / ModelTrace 掺水检测）只在改动时写回 extra。
+    const qualitySettings = accountQualitySettingsRef.value
+    if (qualitySettings?.isDirty()) {
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra: Record<string, unknown> = { ...currentExtra }
+      qualitySettings.applyToExtra(newExtra)
       updatePayload.extra = newExtra
     }
 

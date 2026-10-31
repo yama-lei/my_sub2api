@@ -568,6 +568,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create test payload")
 	}
+	applyAccountTestProbeToClaudePayload(c, payload)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event
@@ -647,6 +648,7 @@ func (s *AccountTestService) testClaudeVertexServiceAccountConnection(c *gin.Con
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create test payload")
 	}
+	applyAccountTestProbeToClaudePayload(c, payload)
 	payloadBytes, _ := json.Marshal(payload)
 	vertexBody, err := buildVertexAnthropicRequestBody(payloadBytes)
 	if err != nil {
@@ -898,6 +900,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	applyAccountTestProbeToResponsesPayload(c, payload, isOAuth)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -2878,6 +2881,11 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 		eventType, _ := data["type"].(string)
 
 		switch eventType {
+		case "message_start":
+			if message, ok := data["message"].(map[string]any); ok {
+				model, _ := message["model"].(string)
+				recordAccountTestObservedModel(c, model)
+			}
 		case "content_block_delta":
 			if delta, ok := data["delta"].(map[string]any); ok {
 				if text, ok := delta["text"].(string); ok {
@@ -3015,6 +3023,11 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 		eventType, _ := data["type"].(string)
 
 		switch eventType {
+		case "response.created":
+			if responseData, ok := data["response"].(map[string]any); ok {
+				model, _ := responseData["model"].(string)
+				recordAccountTestObservedModel(c, model)
+			}
 		case "response.output_text.delta":
 			// OpenAI Responses API uses "delta" field for text content
 			if delta, ok := data["delta"].(string); ok && delta != "" {

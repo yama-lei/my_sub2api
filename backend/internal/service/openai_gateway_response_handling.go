@@ -256,6 +256,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	codexFailureTerminal := account != nil && account.IsOpenAIOAuthLike()
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	var streamEarlyErr error
+	// downgradeChecked: the first upstream-declared model has been compared.
+	downgradeChecked := false
 	terminalFailurePending := false
 	failureDelivered := false
 	suppressCurrentEvent := false
@@ -503,6 +505,14 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				suppressCurrentEvent = true
 			}
 			observer.ObserveOpenAI(dataBytes, eventType)
+			if !downgradeChecked && !openAIStreamClientOutputStarted(c, clientOutputStarted) {
+				var downgradeErr *UpstreamFailoverError
+				downgradeChecked, downgradeErr = s.observeModelDowngradeEvent(c, account, dataBytes, mappedModel, false, upstreamRequestID)
+				if downgradeErr != nil {
+					streamEarlyErr = downgradeErr
+					return
+				}
+			}
 			// 初始上游 data 的 type 只解析一次：原始值保持终止事件的精确匹配，规范化值供后续分支复用。
 			if openAIStreamEventIsTerminalWithType(data, eventType) {
 				sawTerminalEvent = true
