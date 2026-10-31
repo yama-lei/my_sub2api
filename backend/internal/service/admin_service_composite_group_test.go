@@ -217,3 +217,33 @@ func TestAdminService_CNProviderModelsListCandidatesKeepClaudeDefaults(t *testin
 		require.Equal(t, want, defaultModelsListCandidateIDs(platform), "platform=%s", platform)
 	}
 }
+
+func TestAdminService_QoderModelsListCandidatesUseOnlyAccountMappings(t *testing.T) {
+	require.Equal(t, []string{}, defaultModelsListCandidateIDs(PlatformQoder))
+	groupRepo := &groupRepoStubForAdmin{getByIDByID: map[int64]*Group{
+		99: {ID: 99, Platform: PlatformQoder},
+	}}
+	for _, tc := range []struct {
+		name     string
+		accounts []Account
+		want     []string
+	}{
+		{name: "empty pool", want: []string{}},
+		{name: "missing mapping", accounts: []Account{{ID: 18, Platform: PlatformQoder}}, want: []string{}},
+		{name: "mapped pool", accounts: []Account{
+			{ID: 18, Platform: PlatformQoder, Credentials: map[string]any{"model_mapping": map[string]any{"glm-5.3": "glm-5.3", "qwen3.8-flash": "qwen3.8-flash"}}},
+			{ID: 19, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"claude-only": "claude-only"}}},
+		}, want: []string{"glm-5.3", "qwen3.8-flash"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &adminServiceImpl{groupRepo: groupRepo, accountRepo: &accountRepoStubForCompositeModelsList{accounts: tc.accounts}}
+			got, err := svc.GetGroupModelsListCandidates(context.Background(), 99, "")
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			require.ElementsMatch(t, tc.want, got)
+			fresh, err := svc.GetGroupModelsListCandidates(context.Background(), 0, PlatformQoder)
+			require.NoError(t, err)
+			require.Equal(t, []string{}, fresh)
+		})
+	}
+}
