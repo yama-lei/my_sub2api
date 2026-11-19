@@ -52,7 +52,7 @@ npm install -g pnpm
 
 ### CI 要求
 
-- Go 版本必须是 **1.27.0**：两个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.0'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`、`security-scan.yml` 里的这句断言，**以及根目录 `Dockerfile` 的 `ARG GOLANG_IMAGE`**。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人构建镜像时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
+- Go 版本必须是 **1.27.4**：两个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.4'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`、`security-scan.yml` 里的这句断言，**以及根目录 `Dockerfile` 的 `ARG GOLANG_IMAGE`**。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人构建镜像时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地命令（统一从仓库根目录执行）
