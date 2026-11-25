@@ -151,6 +151,8 @@ export default {
     usage: 'Usage',
     today: 'Today',
     total: 'Last 30d',
+    waivedCost: 'Waived cost (30d)',
+    waivedCostHint: 'Free private calls valued at the site’s base prices.',
     quota: 'Quota',
     lastUsedAt: 'Last Used',
     lastUsedIP: 'Last Used IP',

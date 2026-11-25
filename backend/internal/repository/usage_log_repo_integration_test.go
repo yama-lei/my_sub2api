@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
@@ -1132,13 +1133,33 @@ func (s *UsageLogRepoSuite) TestGetBatchApiKeyUsageStats() {
 	apiKey1 := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-batchkey1", Name: "k1"})
 	apiKey2 := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-batchkey2", Name: "k2"})
 	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-batchkey"})
+	group, err := s.client.Group.Create().
+		SetName("batchkey-private").
+		SetOwnerUserID(user.ID).
+		SetIsExclusive(true).
+		SetRateMultiplier(0).
+		Save(s.ctx)
+	s.Require().NoError(err)
 
-	s.createUsageLog(user, apiKey1, account, 10, 20, 0.5, time.Now())
-	s.createUsageLog(user, apiKey2, account, 15, 25, 0.6, time.Now())
+	today := timezone.Today()
+	earlier := today.AddDate(0, 0, -1)
+	freeToday := s.createUsageLog(user, apiKey1, account, 10, 20, 0.5, today)
+	freeEarlier := s.createUsageLog(user, apiKey1, account, 10, 20, 1.5, earlier)
+	freeOutsideRange := s.createUsageLog(user, apiKey1, account, 10, 20, 5, earlier.AddDate(0, 0, -1))
+	s.createUsageLog(user, apiKey1, account, 10, 20, 0.25, earlier)
+	s.createUsageLog(user, apiKey2, account, 15, 25, 0.6, today)
+	_, err = s.client.UsageLog.Update().
+		Where(usagelog.IDIn(freeToday.ID, freeEarlier.ID, freeOutsideRange.ID)).
+		SetGroupID(group.ID).
+		SetActualCost(0).
+		Save(s.ctx)
+	s.Require().NoError(err)
 
-	stats, err := s.repo.GetBatchAPIKeyUsageStats(s.ctx, []int64{apiKey1.ID, apiKey2.ID}, time.Time{}, time.Time{})
+	stats, err := s.repo.GetBatchAPIKeyUsageStats(s.ctx, []int64{apiKey1.ID, apiKey2.ID}, earlier, today.Add(time.Hour))
 	s.Require().NoError(err, "GetBatchAPIKeyUsageStats")
 	s.Require().Len(stats, 2)
+	s.Require().Equal(BatchAPIKeyUsageStats{APIKeyID: apiKey1.ID, TotalActualCost: 0.25, TotalPrivateBaseCost: 2}, *stats[apiKey1.ID])
+	s.Require().Equal(BatchAPIKeyUsageStats{APIKeyID: apiKey2.ID, TodayActualCost: 0.6, TotalActualCost: 0.6}, *stats[apiKey2.ID])
 }
 
 func (s *UsageLogRepoSuite) TestGetBatchApiKeyUsageStats_Empty() {

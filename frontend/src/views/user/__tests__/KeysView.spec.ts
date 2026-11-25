@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-import type { ApiKey } from '@/types'
+import type { ApiKey, Group } from '@/types'
 import { keysAPI } from '@/api'
 import KeysView from '../KeysView.vue'
 
@@ -56,6 +56,7 @@ const messages: Record<string, string> = {
   'keys.status.inactive': 'Inactive',
   'keys.status.quota_exhausted': 'Quota exhausted',
   'keys.usage': 'Usage',
+  'keys.waivedCost': 'Waived cost (30d)',
 }
 
 vi.mock('@/api', () => ({
@@ -173,6 +174,12 @@ const DataTableStub = {
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
+        <div data-test="key-value">
+          <slot name="cell-key" :value="row.key" :row="row" />
+        </div>
+        <div v-if="columns.some((col) => col.key === 'waived_cost')" data-test="waived-cost">
+          <slot name="cell-waived_cost" :row="row" />
+        </div>
         <slot name="cell-actions" :row="row" />
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
@@ -343,6 +350,7 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).toEqual([
       'name',
       'key',
+      'waived_cost',
       'group',
       'current_concurrency',
       'usage',
@@ -470,6 +478,7 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).toEqual([
       'name',
       'key',
+      'waived_cost',
       'current_concurrency',
       'usage',
       'rate_limit',
@@ -670,11 +679,41 @@ describe('user KeysView column settings', () => {
       expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(true)
 
       resolveUsage({
-        stats: { 1: { api_key_id: 1, today_actual_cost: 0.5, total_actual_cost: 12.25 } },
+        stats: { 1: { api_key_id: 1, today_actual_cost: 0.5, total_actual_cost: 12.25, total_private_base_cost: 0 } },
       })
       await flushPromises()
       expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
       expect(wrapper.get('[data-test="usage"]').text()).toContain('$12.2500')
+      expect(wrapper.get('[data-test="waived-cost"]').text()).toBe('—')
+    })
+
+    it('shows the waived amount in its own column and keeps actual charges in the usage column', async () => {
+      const key = createApiKey()
+      const group = { id: 7, owner_user_id: key.user_id, platform: 'composite' } as Group
+      listKeys.mockResolvedValueOnce({
+        items: [{ ...key, group_id: group.id, group }],
+        total: 1,
+        pages: 1,
+      })
+      getDashboardApiKeysUsage.mockResolvedValue({
+        stats: {
+          1: {
+            api_key_id: 1,
+            today_actual_cost: 0,
+            total_actual_cost: 1.25,
+            total_private_base_cost: 2.5,
+          },
+        },
+      })
+
+      const wrapper = await mountView()
+      const keyCell = wrapper.get('[data-test="key-value"]')
+      expect(keyCell.find('code').exists()).toBe(true)
+      expect(keyCell.text()).not.toContain('$2.5000')
+      expect(wrapper.get('[data-test="waived-cost"]').text()).toBe('$2.5000')
+      const usage = wrapper.get('[data-test="usage"]').text()
+      expect(usage).toContain('$1.2500')
+      expect(usage).not.toContain('$2.5000')
     })
 
     it('stops showing usage placeholders when the usage request fails', async () => {

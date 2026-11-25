@@ -141,6 +141,16 @@
             </div>
           </template>
 
+          <template #cell-waived_cost="{ row }">
+            <span
+              v-if="usageLoading && !usageStats[row.id]"
+              class="inline-block h-3 w-14 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
+            />
+            <span v-else :title="t('keys.waivedCostHint')" class="whitespace-nowrap tabular-nums">
+              {{ formatWaivedCost(row) }}
+            </span>
+          </template>
+
           <template #cell-name="{ value, row }">
             <div class="flex items-center gap-1.5">
               <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
@@ -1275,6 +1285,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
   { key: 'id', label: t('keys.id'), sortable: true },
   { key: 'key', label: t('keys.apiKey'), sortable: false },
+  { key: 'waived_cost', label: t('keys.waivedCost'), sortable: false },
   { key: 'group', label: t('keys.group'), sortable: true },
   { key: 'current_concurrency', label: t('keys.currentConcurrency'), sortable: true },
   { key: 'usage', label: t('keys.usage'), sortable: false },
@@ -1389,6 +1400,13 @@ let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const usageLoading = ref(false)
 const userGroupRates = ref<Record<number, number>>({})
+
+const formatWaivedCost = (key: ApiKey) => {
+  const cost = usageStats.value[key.id]?.total_private_base_cost
+  const isPrivate = key.group?.owner_user_id === key.user_id
+  if (cost == null || (cost === 0 && !isPrivate)) return '—'
+  return `$${cost.toFixed(4)}`
+}
 
 const pagination = ref({
   page: 1,

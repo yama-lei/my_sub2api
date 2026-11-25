@@ -548,7 +548,7 @@ func (r *usageLogRepository) GetBatchUserUsageStats(ctx context.Context, userIDs
 // BatchAPIKeyUsageStats represents usage stats for a single API key
 type BatchAPIKeyUsageStats = usagestats.BatchAPIKeyUsageStats
 
-// GetBatchAPIKeyUsageStats gets today and total actual_cost for multiple API keys within a time range.
+// GetBatchAPIKeyUsageStats returns actual charges and the base cost of free private calls for each key.
 // If startTime is zero, defaults to 30 days ago.
 func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*BatchAPIKeyUsageStats, error) {
 	result := make(map[int64]*BatchAPIKeyUsageStats)
@@ -571,13 +571,18 @@ func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKe
 
 	query := `
 		SELECT
-			api_key_id,
-			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $2 AND created_at < $3), 0) as total_cost,
-			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $4), 0) as today_cost
-		FROM usage_logs
-		WHERE api_key_id = ANY($1)
-		  AND created_at >= LEAST($2, $4)
-		GROUP BY api_key_id
+			log.api_key_id,
+			COALESCE(SUM(log.actual_cost) FILTER (WHERE log.created_at >= $2 AND log.created_at < $3), 0) AS total_actual_cost,
+			COALESCE(SUM(log.actual_cost) FILTER (WHERE log.created_at >= $4), 0) AS today_actual_cost,
+			COALESCE(SUM(log.total_cost) FILTER (
+				WHERE private_group.id IS NOT NULL AND log.created_at >= $2 AND log.created_at < $3
+			), 0) AS total_private_base_cost
+		FROM usage_logs log
+		LEFT JOIN groups private_group
+			ON private_group.id = log.group_id AND private_group.owner_user_id = log.user_id AND log.actual_cost = 0
+		WHERE log.api_key_id = ANY($1)
+		  AND log.created_at >= LEAST($2, $4)
+		GROUP BY log.api_key_id
 	`
 	today := timezone.Today()
 	rows, err := r.sql.QueryContext(ctx, query, pq.Array(normalizedAPIKeyIDs), startTime, endTime, today)
@@ -585,17 +590,12 @@ func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKe
 		return nil, err
 	}
 	for rows.Next() {
-		var apiKeyID int64
-		var total float64
-		var todayTotal float64
-		if err := rows.Scan(&apiKeyID, &total, &todayTotal); err != nil {
+		stats := &BatchAPIKeyUsageStats{}
+		if err := rows.Scan(&stats.APIKeyID, &stats.TotalActualCost, &stats.TodayActualCost, &stats.TotalPrivateBaseCost); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
-		if stats, ok := result[apiKeyID]; ok {
-			stats.TotalActualCost = total
-			stats.TodayActualCost = todayTotal
-		}
+		result[stats.APIKeyID] = stats
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
