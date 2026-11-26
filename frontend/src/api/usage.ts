@@ -326,6 +326,7 @@ export interface BatchApiKeyUsageStats {
   api_key_id: number
   today_actual_cost: number
   total_actual_cost: number
+  today_private_base_cost: number
   total_private_base_cost: number
 }
 

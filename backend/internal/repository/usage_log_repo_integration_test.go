@@ -1158,7 +1158,9 @@ func (s *UsageLogRepoSuite) TestGetBatchApiKeyUsageStats() {
 	stats, err := s.repo.GetBatchAPIKeyUsageStats(s.ctx, []int64{apiKey1.ID, apiKey2.ID}, earlier, today.Add(time.Hour))
 	s.Require().NoError(err, "GetBatchAPIKeyUsageStats")
 	s.Require().Len(stats, 2)
-	s.Require().Equal(BatchAPIKeyUsageStats{APIKeyID: apiKey1.ID, TotalActualCost: 0.25, TotalPrivateBaseCost: 2}, *stats[apiKey1.ID])
+	s.Require().Equal(BatchAPIKeyUsageStats{
+		APIKeyID: apiKey1.ID, TotalActualCost: 0.25, TodayPrivateBaseCost: 0.5, TotalPrivateBaseCost: 2,
+	}, *stats[apiKey1.ID])
 	s.Require().Equal(BatchAPIKeyUsageStats{APIKeyID: apiKey2.ID, TodayActualCost: 0.6, TotalActualCost: 0.6}, *stats[apiKey2.ID])
 }
 

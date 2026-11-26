@@ -142,13 +142,25 @@
           </template>
 
           <template #cell-waived_cost="{ row }">
-            <span
-              v-if="usageLoading && !usageStats[row.id]"
-              class="inline-block h-3 w-14 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
-            />
-            <span v-else :title="t('keys.waivedCostHint')" class="whitespace-nowrap tabular-nums">
-              {{ formatWaivedCost(row) }}
-            </span>
+            <div :title="t('keys.waivedCostHint')" class="space-y-0.5 whitespace-nowrap text-sm tabular-nums">
+              <div
+                v-for="{ label, cost } in [
+                  { label: 'keys.today', cost: usageStats[row.id]?.today_private_base_cost },
+                  { label: 'keys.total', cost: usageStats[row.id]?.total_private_base_cost },
+                ]"
+                :key="label"
+                class="flex items-center gap-1.5"
+              >
+                <span class="text-gray-500 dark:text-gray-400">{{ t(label) }}:</span>
+                <span
+                  v-if="usageLoading && !usageStats[row.id]"
+                  class="inline-block h-3 w-14 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
+                />
+                <span v-else class="font-medium text-gray-900 dark:text-white">
+                  {{ formatWaivedCost(row, cost) }}
+                </span>
+              </div>
+            </div>
           </template>
 
           <template #cell-name="{ value, row }">
@@ -1401,8 +1413,7 @@ const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const usageLoading = ref(false)
 const userGroupRates = ref<Record<number, number>>({})
 
-const formatWaivedCost = (key: ApiKey) => {
-  const cost = usageStats.value[key.id]?.total_private_base_cost
+const formatWaivedCost = (key: ApiKey, cost: number | undefined) => {
   const isPrivate = key.group?.owner_user_id === key.user_id
   if (cost == null || (cost === 0 && !isPrivate)) return '—'
   return `$${cost.toFixed(4)}`

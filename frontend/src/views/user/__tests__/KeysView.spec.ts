@@ -56,7 +56,9 @@ const messages: Record<string, string> = {
   'keys.status.inactive': 'Inactive',
   'keys.status.quota_exhausted': 'Quota exhausted',
   'keys.usage': 'Usage',
-  'keys.waivedCost': 'Waived cost (30d)',
+  'keys.today': 'Today',
+  'keys.total': 'Last 30d',
+  'keys.waivedCost': 'Waived cost',
 }
 
 vi.mock('@/api', () => ({
@@ -679,15 +681,24 @@ describe('user KeysView column settings', () => {
       expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(true)
 
       resolveUsage({
-        stats: { 1: { api_key_id: 1, today_actual_cost: 0.5, total_actual_cost: 12.25, total_private_base_cost: 0 } },
+        stats: {
+          1: {
+            api_key_id: 1,
+            today_actual_cost: 0.5,
+            total_actual_cost: 12.25,
+            today_private_base_cost: 0,
+            total_private_base_cost: 0,
+          },
+        },
       })
       await flushPromises()
       expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
       expect(wrapper.get('[data-test="usage"]').text()).toContain('$12.2500')
-      expect(wrapper.get('[data-test="waived-cost"]').text()).toBe('—')
+      const waivedCost = wrapper.get('[data-test="waived-cost"]').text().replace(/\s+/g, '')
+      expect(waivedCost).toBe('Today:—Last30d:—')
     })
 
-    it('shows the waived amount in its own column and keeps actual charges in the usage column', async () => {
+    it('shows both waived totals alongside the key and keeps actual charges in the usage column', async () => {
       const key = createApiKey()
       const group = { id: 7, owner_user_id: key.user_id, platform: 'composite' } as Group
       listKeys.mockResolvedValueOnce({
@@ -701,6 +712,7 @@ describe('user KeysView column settings', () => {
             api_key_id: 1,
             today_actual_cost: 0,
             total_actual_cost: 1.25,
+            today_private_base_cost: 0.125,
             total_private_base_cost: 2.5,
           },
         },
@@ -710,7 +722,8 @@ describe('user KeysView column settings', () => {
       const keyCell = wrapper.get('[data-test="key-value"]')
       expect(keyCell.find('code').exists()).toBe(true)
       expect(keyCell.text()).not.toContain('$2.5000')
-      expect(wrapper.get('[data-test="waived-cost"]').text()).toBe('$2.5000')
+      const waivedCost = wrapper.get('[data-test="waived-cost"]').text().replace(/\s+/g, '')
+      expect(waivedCost).toBe('Today:$0.1250Last30d:$2.5000')
       const usage = wrapper.get('[data-test="usage"]').text()
       expect(usage).toContain('$1.2500')
       expect(usage).not.toContain('$2.5000')

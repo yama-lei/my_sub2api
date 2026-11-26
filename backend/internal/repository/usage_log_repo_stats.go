@@ -576,7 +576,10 @@ func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKe
 			COALESCE(SUM(log.actual_cost) FILTER (WHERE log.created_at >= $4), 0) AS today_actual_cost,
 			COALESCE(SUM(log.total_cost) FILTER (
 				WHERE private_group.id IS NOT NULL AND log.created_at >= $2 AND log.created_at < $3
-			), 0) AS total_private_base_cost
+			), 0) AS total_private_base_cost,
+			COALESCE(SUM(log.total_cost) FILTER (
+				WHERE private_group.id IS NOT NULL AND log.created_at >= $4
+			), 0) AS today_private_base_cost
 		FROM usage_logs log
 		LEFT JOIN groups private_group
 			ON private_group.id = log.group_id AND private_group.owner_user_id = log.user_id AND log.actual_cost = 0
@@ -591,7 +594,10 @@ func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKe
 	}
 	for rows.Next() {
 		stats := &BatchAPIKeyUsageStats{}
-		if err := rows.Scan(&stats.APIKeyID, &stats.TotalActualCost, &stats.TodayActualCost, &stats.TotalPrivateBaseCost); err != nil {
+		if err := rows.Scan(
+			&stats.APIKeyID, &stats.TotalActualCost, &stats.TodayActualCost,
+			&stats.TotalPrivateBaseCost, &stats.TodayPrivateBaseCost,
+		); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}

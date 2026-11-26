@@ -151,7 +151,7 @@ export default {
     usage: '用量',
     today: '今日',
     total: '近30天',
-    waivedCost: '免扣额度（近30天）',
+    waivedCost: '免扣额度',
     waivedCostHint: '免扣费的私有调用按站内原价折算。',
     quota: '额度',
     lastUsedAt: '上次使用时间',
